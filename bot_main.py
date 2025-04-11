@@ -23,7 +23,7 @@ CONFIG = {
     },
     'LOW_STOCK_THRESHOLD': 20,
     'WORKING_HOURS': "08-22",  # Часы работы (МСК)
-    'CHECK_INTERVAL': 240,  # Интервал проверки в минутах
+    'CHECK_INTERVAL': 120,  # Интервал проверки в минутах
     'DELAY_BETWEEN_REQUESTS': 30,
     'LOG_FILE': 'wb_bot_critical.log'
 }
