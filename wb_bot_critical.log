@@ -1,0 +1,122 @@
+2025-04-10 16:05:39,138 - root - CRITICAL - CRITICAL: Ошибка при запуске бота: This Updater is still running!
+Traceback (most recent call last):
+  File "d:\Lessons\Python\bot\bot_main.py", line 278, in main
+    async with application:
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_application.py", line 384, in __aexit__
+    await self.shutdown()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_application.py", line 544, in shutdown
+    await self.updater.shutdown()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_updater.py", line 196, in shutdown
+    raise RuntimeError("This Updater is still running!")
+RuntimeError: This Updater is still running!
+2025-04-10 16:05:39,142 - root - CRITICAL - CRITICAL: Необработанная ошибка: This Updater is still running!
+Traceback (most recent call last):
+  File "d:\Lessons\Python\bot\bot_main.py", line 293, in <module>
+    asyncio.run(main())
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\asyncio\runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\asyncio\base_events.py", line 646, in run_until_complete
+    return future.result()
+  File "d:\Lessons\Python\bot\bot_main.py", line 278, in main
+    async with application:
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_application.py", line 384, in __aexit__
+    await self.shutdown()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_application.py", line 544, in shutdown
+    await self.updater.shutdown()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_updater.py", line 196, in shutdown
+    raise RuntimeError("This Updater is still running!")
+RuntimeError: This Updater is still running!
+2025-04-10 16:06:05,679 - root - CRITICAL - CRITICAL: Ошибка при запуске бота: This Updater is still running!
+Traceback (most recent call last):
+  File "d:\Lessons\Python\bot\bot_main.py", line 278, in main
+    async with application:
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_application.py", line 384, in __aexit__
+    await self.shutdown()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_application.py", line 544, in shutdown
+    await self.updater.shutdown()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_updater.py", line 196, in shutdown
+    raise RuntimeError("This Updater is still running!")
+RuntimeError: This Updater is still running!
+2025-04-10 16:06:05,682 - root - CRITICAL - CRITICAL: Необработанная ошибка: This Updater is still running!
+Traceback (most recent call last):
+  File "d:\Lessons\Python\bot\bot_main.py", line 293, in <module>
+    asyncio.run(main())
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\asyncio\runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\asyncio\base_events.py", line 646, in run_until_complete
+    return future.result()
+  File "d:\Lessons\Python\bot\bot_main.py", line 278, in main
+    async with application:
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_application.py", line 384, in __aexit__
+    await self.shutdown()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_application.py", line 544, in shutdown
+    await self.updater.shutdown()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_updater.py", line 196, in shutdown
+    raise RuntimeError("This Updater is still running!")
+RuntimeError: This Updater is still running!
+2025-04-10 16:34:49,725 - root - CRITICAL - CRITICAL: Ошибка: name 'get_stock' is not defined
+Traceback (most recent call last):
+  File "d:\Lessons\Python\bot\bot_main.py", line 78, in main
+    application.add_handler(CommandHandler("get_stock", get_stock))
+NameError: name 'get_stock' is not defined
+2025-04-10 16:34:49,726 - root - CRITICAL - CRITICAL: Ошибка при остановке: This Updater is not running!
+Traceback (most recent call last):
+  File "d:\Lessons\Python\bot\bot_main.py", line 102, in main
+    await application.updater.stop()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\telegram\ext\_updater.py", line 735, in stop
+    raise RuntimeError("This Updater is not running!")
+RuntimeError: This Updater is not running!
+2025-04-10 17:23:01,214 - __main__ - CRITICAL - CRITICAL: Ошибка в start: 'NoneType' object has no attribute 'reply_text'
+Traceback (most recent call last):
+  File "d:\Lessons\Python\bot\bot_main.py", line 206, in start
+    await update.message.reply_text(
+AttributeError: 'NoneType' object has no attribute 'reply_text'
+2025-04-11 09:38:40,819 - __main__ - CRITICAL - CRITICAL: Ошибка запроса: 429 для URL: https://seller-analytics-api.wildberries.ru/api/v1/warehouse_remains/tasks/e966b4c4-a634-4471-bdf2-7d864bc8e692/download
+2025-04-11 13:00:37,199 - __main__ - CRITICAL - CRITICAL: Ошибка при запуске бота: 
+Traceback (most recent call last):
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\fernet.py", line 127, in _verify_signature
+    h.verify(data[-32:])
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\hazmat\primitives\hmac.py", line 72, in verify
+    ctx.verify(signature)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\hazmat\backends\openssl\hmac.py", line 85, in verify
+    raise InvalidSignature("Signature did not match digest.")
+cryptography.exceptions.InvalidSignature: Signature did not match digest.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "d:\Lessons\Python\bot\bot_main.py", line 276, in main
+    tg_token = token_manager.decrypt_token('TG_API_KEY')
+  File "d:\Lessons\Python\bot\token_manager.py", line 53, in decrypt_token
+    return self.fernet.decrypt(encrypted_token).decode()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\fernet.py", line 88, in decrypt
+    return self._decrypt_data(data, timestamp, time_info)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\fernet.py", line 145, in _decrypt_data
+    self._verify_signature(data)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\fernet.py", line 129, in _verify_signature
+    raise InvalidToken
+cryptography.fernet.InvalidToken
+2025-04-11 13:01:00,506 - __main__ - CRITICAL - CRITICAL: Ошибка при запуске бота: 
+Traceback (most recent call last):
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\fernet.py", line 127, in _verify_signature
+    h.verify(data[-32:])
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\hazmat\primitives\hmac.py", line 72, in verify
+    ctx.verify(signature)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\hazmat\backends\openssl\hmac.py", line 85, in verify
+    raise InvalidSignature("Signature did not match digest.")
+cryptography.exceptions.InvalidSignature: Signature did not match digest.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "d:\Lessons\Python\bot\bot_main.py", line 276, in main
+    tg_token = token_manager.decrypt_token('TG_API_KEY')
+  File "d:\Lessons\Python\bot\token_manager.py", line 53, in decrypt_token
+    return self.fernet.decrypt(encrypted_token).decode()
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\fernet.py", line 88, in decrypt
+    return self._decrypt_data(data, timestamp, time_info)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\fernet.py", line 145, in _decrypt_data
+    self._verify_signature(data)
+  File "C:\Users\USER\AppData\Local\Programs\Python\Python310\lib\site-packages\cryptography\fernet.py", line 129, in _verify_signature
+    raise InvalidToken
+cryptography.fernet.InvalidToken
