@@ -251,7 +251,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
                 ],
                 [
-                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto')
+                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto'),
+                    InlineKeyboardButton("📦 Поставки", callback_data='supplies')
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -276,7 +277,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if query.data == 'new_user':
             await query.message.reply_text(
-                "🔑 Пожалуйста, введите ваш токен WB (Аналитика):"
+                "🔑 Пожалуйста, введите ваш токен WB:"
             )
             context.user_data['waiting_for_token'] = True
             return
@@ -285,6 +286,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text(
                 "❌ Сначала необходимо добавить токен WB через команду /start"
             )
+            return
+
+        if query.data == 'supplies':
+            await query.message.reply_text(
+                "🔑 Пожалуйста, введите токен для поставок:"
+            )
+            context.user_data['waiting_for_warehouse_token'] = True
             return
             
         if query.data == 'check_stock':
@@ -333,7 +341,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
                 ],
                 [
-                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto')
+                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto'),
+                    InlineKeyboardButton("📦 Поставки", callback_data='supplies')
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -343,6 +352,68 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Теперь вы можете использовать бота.",
                 reply_markup=reply_markup
             )
+            
+        elif context.user_data.get('waiting_for_warehouse_token'):
+            token = update.message.text.strip()
+            bot.user_data.add_warehouse_token(user_id, token)
+            context.user_data['waiting_for_warehouse_token'] = False
+            context.user_data['waiting_for_coefficient'] = True
+            
+            await update.message.reply_text(
+                "Укажите желаемый коэффициент от 0 (бесплатная):"
+            )
+            
+        elif context.user_data.get('waiting_for_coefficient'):
+            try:
+                coefficient = float(update.message.text.strip())
+                if coefficient < 0:
+                    raise ValueError("Коэффициент не может быть отрицательным")
+                    
+                bot.user_data.set_coefficient(user_id, coefficient)
+                context.user_data['waiting_for_coefficient'] = False
+                
+                # Получаем данные о поставках
+                warehouse_token = bot.user_data.get_warehouse_token(user_id)
+                if not warehouse_token:
+                    await update.message.reply_text("❌ Токен для поставок не найден")
+                    return
+                    
+                headers = {
+                    'Accept': 'application/json',
+                    'Authorization': warehouse_token
+                }
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        "https://supplies-api.wildberries.ru/api/v1/acceptance/coefficients",
+                        headers=headers
+                    ) as response:
+                        if response.status != 200:
+                            await update.message.reply_text(f"❌ Ошибка запроса: {response.status}")
+                            return
+                            
+                        data = await response.json()
+                        
+                        # Фильтруем только короба
+                        boxes = [item for item in data if item.get('boxTypeName') == 'Короба']
+                        
+                        # Группируем данные
+                        table = "| склад | дата | Коэф, % |\n| --- | --- | --- |\n"
+                        for box in boxes:
+                            date = datetime.fromisoformat(box['date']).strftime('%d.%m.%Y')
+                            if box['coefficient'] >= coefficient:
+                                table += f"| {box['warehouseName']} | {date} | {box['coefficient']} |\n"
+                        
+                        await update.message.reply_text(
+                            f"📊 Результаты по поставкам (коэффициент ≥ {coefficient}%):\n\n{table}"
+                        )
+                        
+            except ValueError as e:
+                await update.message.reply_text(f"❌ Ошибка: {str(e)}")
+            except Exception as e:
+                logger.critical(f"CRITICAL: Ошибка при обработке коэффициента: {str(e)}", exc_info=True)
+                await update.message.reply_text("❌ Произошла критическая ошибка")
+                
         else:
             await update.message.reply_text(
                 "Используйте команду /start для начала работы с ботом"

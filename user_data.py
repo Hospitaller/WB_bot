@@ -15,7 +15,9 @@ class UserData:
                 user_id = int(key.replace('WB_TOKEN_', ''))
                 data[user_id] = {
                     'wb_token': value,
-                    'auto_check_enabled': False
+                    'auto_check_enabled': False,
+                    'warehouse_token': os.getenv(f'WB_TOKEN_{user_id}_warehouse'),
+                    'coefficient': 0  # По умолчанию 0
                 }
         return data
 
@@ -25,12 +27,32 @@ class UserData:
         load_dotenv(self.env_file, override=True)
         self.data[user_id] = {
             'wb_token': wb_token,
-            'auto_check_enabled': False
+            'auto_check_enabled': False,
+            'warehouse_token': None,
+            'coefficient': 0
         }
+
+    def add_warehouse_token(self, user_id: int, token: str):
+        env_key = f'WB_TOKEN_{user_id}_warehouse'
+        set_key(self.env_file, env_key, token)
+        load_dotenv(self.env_file, override=True)
+        if user_id in self.data:
+            self.data[user_id]['warehouse_token'] = token
+
+    def set_coefficient(self, user_id: int, coefficient: float):
+        if user_id in self.data:
+            self.data[user_id]['coefficient'] = coefficient
 
     def get_user_token(self, user_id: int) -> Optional[str]:
         load_dotenv(self.env_file, override=True)
         return os.getenv(f'WB_TOKEN_{user_id}')
+
+    def get_warehouse_token(self, user_id: int) -> Optional[str]:
+        load_dotenv(self.env_file, override=True)
+        return os.getenv(f'WB_TOKEN_{user_id}_warehouse')
+
+    def get_coefficient(self, user_id: int) -> float:
+        return self.data.get(user_id, {}).get('coefficient', 0)
 
     def is_user_exists(self, user_id: int) -> bool:
         load_dotenv(self.env_file, override=True)
@@ -44,8 +66,12 @@ class UserData:
         return self.data.get(user_id, {}).get('auto_check_enabled', False)
 
     def remove_user(self, user_id: int):
-        env_key = f'WB_TOKEN_{user_id}'
-        unset_key(self.env_file, env_key)
+        env_keys = [
+            f'WB_TOKEN_{user_id}',
+            f'WB_TOKEN_{user_id}_warehouse'
+        ]
+        for key in env_keys:
+            unset_key(self.env_file, key)
         load_dotenv(self.env_file, override=True)
         if user_id in self.data:
             del self.data[user_id] 
