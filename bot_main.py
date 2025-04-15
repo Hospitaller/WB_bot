@@ -227,6 +227,88 @@ class WBStockBot:
             logger.critical(f"CRITICAL: Ошибка остановки периодических проверок: {str(e)}", exc_info=True)
             raise
 
+    async def check_stock(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        if not self.user_data.is_user_exists(user_id):
+            await update.message.reply_text("❌ Вы не зарегистрированы. Используйте /add_user для регистрации.")
+            return
+
+        wb_token = self.user_data.get_user_token(user_id)
+        warehouse_token = self.user_data.get_warehouse_token(user_id)
+        coefficient = self.user_data.get_coefficient(user_id)
+
+        if not wb_token:
+            await update.message.reply_text("❌ Токен WB не найден. Используйте /add_user для добавления токена.")
+            return
+
+        if not warehouse_token:
+            await update.message.reply_text("❌ Токен поставок не найден. Используйте /add_warehouse_token для добавления токена.")
+            return
+
+        try:
+            # Получаем данные о поставках
+            supplies = await self.wb_api.get_supplies(warehouse_token)
+            if not supplies:
+                await update.message.reply_text("❌ Не удалось получить данные о поставках.")
+                return
+
+            # Получаем данные о товарах
+            stocks = await self.wb_api.get_stocks(wb_token)
+            if not stocks:
+                await update.message.reply_text("❌ Не удалось получить данные о товарах.")
+                return
+
+            # Создаем словарь для хранения данных о товарах
+            products = {}
+            for stock in stocks:
+                nm_id = stock.get('nmId')
+                if nm_id:
+                    products[nm_id] = {
+                        'name': stock.get('subject', 'Нет названия'),
+                        'quantity': stock.get('quantity', 0),
+                        'coefficient': 0
+                    }
+
+            # Обновляем коэффициенты из данных о поставках
+            for supply in supplies:
+                for product in supply.get('products', []):
+                    nm_id = product.get('nmId')
+                    if nm_id in products:
+                        products[nm_id]['coefficient'] = product.get('coefficient', 0)
+
+            # Фильтруем товары по коэффициенту и сортируем по убыванию коэффициента
+            filtered_products = {
+                nm_id: data for nm_id, data in products.items()
+                if data['coefficient'] <= coefficient
+            }
+            sorted_products = dict(sorted(
+                filtered_products.items(),
+                key=lambda x: x[1]['coefficient'],
+                reverse=True
+            ))
+
+            if not sorted_products:
+                await update.message.reply_text(f"❌ Нет товаров с коэффициентом меньше или равным {coefficient}.")
+                return
+
+            # Формируем таблицу
+            table = "📊 Товары с коэффициентом ≤ {coefficient}:\n\n"
+            table += "| Артикул | Название | Количество | Коэффициент |\n"
+            table += "|---------|----------|------------|-------------|\n"
+
+            for nm_id, data in sorted_products.items():
+                table += f"| {nm_id} | {data['name']} | {data['quantity']} | {data['coefficient']} |\n"
+
+            # Разбиваем сообщение на части и отправляем
+            message_parts = await self.split_message(table)
+            for part in message_parts:
+                await update.message.reply_text(part)
+                await asyncio.sleep(1)  # Задержка между сообщениями
+
+        except Exception as e:
+            logger.error(f"Ошибка при проверке остатков: {str(e)}")
+            await update.message.reply_text("❌ Произошла ошибка при проверке остатков.")
+
 async def split_message(text: str, max_length: int = 4000) -> list[str]:
     """Разбивает длинное сообщение на части"""
     if len(text) <= max_length:
@@ -320,12 +402,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         if query.data == 'check_stock':
-            class FakeContext:
-                def __init__(self, chat_id, bot):
-                    self._chat_id = chat_id
-                    self.bot = bot
-            fake_context = FakeContext(update.effective_chat.id, context.bot)
-            await bot.fetch_wb_data(fake_context)
+            await bot.check_stock(update, context)
             
         elif query.data == 'start_auto':
             chat_id = update.effective_chat.id
