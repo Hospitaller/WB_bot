@@ -1,6 +1,6 @@
 import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 import aiohttp
 import json
 from datetime import datetime, time, timedelta
@@ -227,64 +227,61 @@ class WBStockBot:
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
+        keyboard = [
+            [
+                InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
+                InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
+            ],
+            [
+                InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto')
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await update.message.reply_text(
             "Привет! Я бот для мониторинга остатков Wildberries.\n"
-            "Используй /get_stock для разовой проверки\n"
-            "/auto_check для запуска автоматических проверок\n"
-            "/stop_check для остановки автоматических проверок"
+            "Выберите действие:",
+            reply_markup=reply_markup
         )
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в start: {str(e)}", exc_info=True)
 
-# Обработчик команды получения остатков
-async def get_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Обработчик нажатий на кнопки
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
     try:
         bot = context.bot_data.get('wb_bot')
         if not bot:
             raise Exception("Бот не инициализирован")
         
-        # Создаем искусственный контекст для разовой проверки
-        class FakeContext:
-            def __init__(self, chat_id, bot):
-                self._chat_id = chat_id
-                self.bot = bot
-        fake_context = FakeContext(update.effective_chat.id, context.bot)
-        await bot.fetch_wb_data(fake_context)
+        if query.data == 'check_stock':
+            # Создаем искусственный контекст для разовой проверки
+            class FakeContext:
+                def __init__(self, chat_id, bot):
+                    self._chat_id = chat_id
+                    self.bot = bot
+            fake_context = FakeContext(update.effective_chat.id, context.bot)
+            await bot.fetch_wb_data(fake_context)
+            
+        elif query.data == 'start_auto':
+            chat_id = update.effective_chat.id
+            await bot.start_periodic_checks(chat_id)
+            await query.message.reply_text(
+                f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_INTERVAL']} минут в рабочее время)"
+            )
+            
+        elif query.data == 'stop_auto':
+            chat_id = update.effective_chat.id
+            if await bot.stop_periodic_checks(chat_id):
+                await query.message.reply_text("🛑 Автоматические проверки остановлены")
+            else:
+                await query.message.reply_text("ℹ️ Нет активных автоматических проверок")
+                
     except Exception as e:
-        logger.critical(f"CRITICAL: Ошибка в get_stock: {str(e)}", exc_info=True)
-        await update.message.reply_text("❌ Произошла критическая ошибка при получении остатков")
-
-# Обработчик команды запуска автоматических проверок
-async def auto_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        bot = context.bot_data.get('wb_bot')
-        if not bot:
-            raise Exception("Бот не инициализирован")
-        
-        chat_id = update.effective_chat.id
-        await bot.start_periodic_checks(chat_id)
-        await update.message.reply_text(
-            f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_INTERVAL']} минут в рабочее время)"
-        )
-    except Exception as e:
-        logger.critical(f"CRITICAL: Ошибка в auto_check: {str(e)}", exc_info=True)
-        await update.message.reply_text("❌ Произошла критическая ошибка при запуске автоматических проверок")
-
-# Обработчик команды остановки автоматических проверок
-async def stop_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        bot = context.bot_data.get('wb_bot')
-        if not bot:
-            raise Exception("Бот не инициализирован")
-        
-        chat_id = update.effective_chat.id
-        if await bot.stop_periodic_checks(chat_id):
-            await update.message.reply_text("🛑 Автоматические проверки остановлены")
-        else:
-            await update.message.reply_text("ℹ️ Нет активных автоматических проверок")
-    except Exception as e:
-        logger.critical(f"CRITICAL: Ошибка в stop_check: {str(e)}", exc_info=True)
-        await update.message.reply_text("❌ Произошла критическая ошибка при остановке автоматических проверок")
+        logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
+        await query.message.reply_text("❌ Произошла критическая ошибка")
 
 # Основная функция запуска бота
 def main():
@@ -294,16 +291,13 @@ def main():
         # Инициализация бота
         application.bot_data['wb_bot'] = WBStockBot(application)
         
-        # Регистрация обработчиков команд
+        # Регистрация обработчиков
         application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("get_stock", get_stock))
-        application.add_handler(CommandHandler("auto_check", auto_check))
-        application.add_handler(CommandHandler("stop_check", stop_check))
+        application.add_handler(CallbackQueryHandler(button_handler))
         
         # Обработчик сигналов завершения
         def signal_handler(signum, frame):
             print("\nБот остановлен")
-            # Создаем и запускаем новую задачу для остановки приложения
             asyncio.create_task(application.stop())
         
         # Регистрация обработчиков сигналов
@@ -312,7 +306,6 @@ def main():
         
         print("Бот запущен")
         application.run_polling()
-       
 
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка при запуске бота: {str(e)}", exc_info=True)
