@@ -292,17 +292,20 @@ class WBStockBot:
                 return
 
             # Формируем таблицу
-            table = "📊 Товары с коэффициентом ≤ {coefficient}:\n\n"
-            table += "| Артикул | Название | Количество | Коэффициент |\n"
-            table += "|---------|----------|------------|-------------|\n"
+            table = f"📊 Товары с коэффициентом ≤ {coefficient}:\n\n"
+            table += "```\n"
+            table += f"{'Артикул':<10} | {'Название':<30} | {'Количество':<10} | {'Коэффициент':<10}\n"
+            table += "-" * 70 + "\n"
 
             for nm_id, data in sorted_products.items():
-                table += f"| {nm_id} | {data['name']} | {data['quantity']} | {data['coefficient']} |\n"
+                table += f"{str(nm_id):<10} | {data['name'][:30]:<30} | {str(data['quantity']):<10} | {str(data['coefficient']):<10}\n"
+            
+            table += "```"
 
             # Разбиваем сообщение на части и отправляем
             message_parts = await self.split_message(table)
             for part in message_parts:
-                await update.message.reply_text(part)
+                await update.message.reply_text(part, parse_mode='Markdown')
                 await asyncio.sleep(1)  # Задержка между сообщениями
 
         except Exception as e:
