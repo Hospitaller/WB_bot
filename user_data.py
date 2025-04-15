@@ -11,14 +11,17 @@ class UserData:
     def _load_data(self) -> Dict[int, Dict]:
         data = {}
         for key, value in os.environ.items():
-            if key.startswith('WB_TOKEN_'):
-                user_id = int(key.replace('WB_TOKEN_', ''))
-                data[user_id] = {
-                    'wb_token': value,
-                    'auto_check_enabled': False,
-                    'warehouse_token': os.getenv(f'WB_TOKEN_{user_id}_warehouse'),
-                    'coefficient': 0  # По умолчанию 0
-                }
+            if key.startswith('WB_TOKEN_') and not key.endswith('_warehouse'):
+                try:
+                    user_id = int(key.replace('WB_TOKEN_', ''))
+                    data[user_id] = {
+                        'wb_token': value,
+                        'auto_check_enabled': False,
+                        'warehouse_token': os.getenv(f'WB_TOKEN_{user_id}_warehouse'),
+                        'coefficient': 0
+                    }
+                except ValueError:
+                    continue
         return data
 
     def add_user(self, user_id: int, wb_token: str):
