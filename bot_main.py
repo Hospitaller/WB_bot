@@ -1,6 +1,6 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 import aiohttp
 import json
 from datetime import datetime, time, timedelta
@@ -9,13 +9,13 @@ import asyncio
 import pytz
 import signal
 from dotenv import load_dotenv
+from user_data import UserData
 
 # Загрузка переменных окружения
 load_dotenv()
 
 # Конфиг
 CONFIG = {
-    'AUTH_TOKEN': os.getenv('AUTH_TOKEN'),
     'TG_API_KEY': os.getenv('TG_API_KEY'),
     'API_URLS': {
         'first': "https://seller-analytics-api.wildberries.ru/api/v1/warehouse_remains?groupBySa=true",
@@ -29,10 +29,10 @@ CONFIG = {
 }
 
 # Проверка наличия необходимых переменных окружения
-if not CONFIG['AUTH_TOKEN'] or not CONFIG['TG_API_KEY']:
-    raise ValueError("Не найдены необходимые переменные окружения AUTH_TOKEN и/или TG_API_KEY")
+if not CONFIG['TG_API_KEY']:
+    raise ValueError("Не найдена необходимая переменная окружения TG_API_KEY")
 
-# Настройка логирования в файл
+# Настройка логирования
 logging.basicConfig(
     level=logging.CRITICAL,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -41,7 +41,6 @@ logging.basicConfig(
     ]
 )
 
-# Логирование в консоль
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -56,6 +55,7 @@ class WBStockBot:
         self.timezone = pytz.timezone('Europe/Moscow')
         self.application = application
         self.active_jobs = {}
+        self.user_data = UserData()
 
     # Проверка на рабочее время
     def is_working_time(self):
@@ -108,14 +108,18 @@ class WBStockBot:
             return
             
         try:
+            wb_token = self.user_data.get_user_token(chat_id)
+            if not wb_token:
+                await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден. Пожалуйста, добавьте токен через команду /start")
+                return
+
             headers = {
                 'Accept': 'application/json',
-                'Authorization': CONFIG['AUTH_TOKEN']
+                'Authorization': wb_token
             }
             
-            timeout = aiohttp.ClientTimeout(total=60)  # Общий таймаут 60 секунд
+            timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                # Первый запрос
                 await context.bot.send_message(chat_id=chat_id, text="🔄 Автоматическая проверка остатков...")
                 first_response = await self.make_api_request(session, CONFIG['API_URLS']['first'], headers, context, chat_id)
                 
@@ -127,21 +131,17 @@ class WBStockBot:
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить task ID")
                     return
                 
-                # Ожидание перед вторым запросом
                 await asyncio.sleep(CONFIG['DELAY_BETWEEN_REQUESTS'])
                 
-                # Второй запрос
                 second_url = CONFIG['API_URLS']['second'].format(task_id=task_id)
                 stock_data = await self.make_api_request(session, second_url, headers, context, chat_id)
                 
                 if not stock_data:
                     return
                 
-                # Форматируем вывод
                 formatted_data = self.format_stock_data(stock_data)
                 low_stock_data = self.format_stock_data(stock_data, highlight_low=True)
                 
-                # Отправка результатов
                 if formatted_data:
                     await context.bot.send_message(
                         chat_id=chat_id,
@@ -175,7 +175,7 @@ class WBStockBot:
             except asyncio.TimeoutError:
                 if attempt < max_retries - 1:
                     logger.warning(f"Таймаут при попытке {attempt + 1}/{max_retries}, повторная попытка...")
-                    await asyncio.sleep(5)  # Пауза перед повторной попыткой
+                    await asyncio.sleep(5)
                     continue
                 error_msg = "Превышено время ожидания ответа от сервера"
                 logger.critical(f"CRITICAL: {error_msg} для URL: {url}")
@@ -207,6 +207,7 @@ class WBStockBot:
                 name=str(chat_id)
             )
             self.active_jobs[chat_id] = job
+            self.user_data.set_auto_check_status(chat_id, True)
             return job
         except Exception as e:
             logger.critical(f"CRITICAL: Ошибка запуска периодических проверок: {str(e)}", exc_info=True)
@@ -218,6 +219,7 @@ class WBStockBot:
             if chat_id in self.active_jobs:
                 self.active_jobs[chat_id].schedule_removal()
                 del self.active_jobs[chat_id]
+                self.user_data.set_auto_check_status(chat_id, False)
                 return True
             return False
         except Exception as e:
@@ -227,22 +229,36 @@ class WBStockBot:
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        keyboard = [
-            [
-                InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
-                InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
-            ],
-            [
-                InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto')
+        bot = context.bot_data.get('wb_bot')
+        if not bot:
+            raise Exception("Бот не инициализирован")
+
+        user_id = update.effective_user.id
+        if not bot.user_data.is_user_exists(user_id):
+            keyboard = [
+                [InlineKeyboardButton("➕ Новый пользователь", callback_data='new_user')]
             ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "Привет! Я бот для мониторинга остатков Wildberries.\n"
-            "Выберите действие:",
-            reply_markup=reply_markup
-        )
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                "👋 Привет! Я бот для мониторинга остатков Wildberries.\n"
+                "Для начала работы необходимо добавить ваш токен WB.",
+                reply_markup=reply_markup
+            )
+        else:
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
+                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
+                ],
+                [
+                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto')
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                "Выберите действие:",
+                reply_markup=reply_markup
+            )
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в start: {str(e)}", exc_info=True)
 
@@ -256,8 +272,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not bot:
             raise Exception("Бот не инициализирован")
         
+        user_id = update.effective_user.id
+        
+        if query.data == 'new_user':
+            await query.message.reply_text(
+                "🔑 Пожалуйста, введите ваш токен WB:"
+            )
+            context.user_data['waiting_for_token'] = True
+            return
+            
+        if not bot.user_data.is_user_exists(user_id):
+            await query.message.reply_text(
+                "❌ Сначала необходимо добавить токен WB через команду /start"
+            )
+            return
+            
         if query.data == 'check_stock':
-            # Создаем искусственный контекст для разовой проверки
             class FakeContext:
                 def __init__(self, chat_id, bot):
                     self._chat_id = chat_id
@@ -283,6 +313,45 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
         await query.message.reply_text("❌ Произошла критическая ошибка")
 
+# Обработчик текстовых сообщений
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        bot = context.bot_data.get('wb_bot')
+        if not bot:
+            raise Exception("Бот не инициализирован")
+
+        user_id = update.effective_user.id
+        
+        if context.user_data.get('waiting_for_token'):
+            token = update.message.text.strip()
+            bot.user_data.add_user(user_id, token)
+            context.user_data['waiting_for_token'] = False
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
+                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
+                ],
+                [
+                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto')
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                "✅ Токен успешно добавлен!\n"
+                "Теперь вы можете использовать бота.",
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text(
+                "Используйте команду /start для начала работы с ботом"
+            )
+            
+    except Exception as e:
+        logger.critical(f"CRITICAL: Ошибка в обработчике сообщений: {str(e)}", exc_info=True)
+        await update.message.reply_text("❌ Произошла критическая ошибка")
+
 # Основная функция запуска бота
 def main():
     try:
@@ -294,6 +363,7 @@ def main():
         # Регистрация обработчиков
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CallbackQueryHandler(button_handler))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         
         # Обработчик сигналов завершения
         def signal_handler(signum, frame):

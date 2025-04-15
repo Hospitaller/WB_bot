@@ -7,5 +7,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./logs:/app/logs
+      - ./user_data:/app/user_data
     env_file:
       - .env 
