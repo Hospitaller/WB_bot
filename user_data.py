@@ -8,14 +8,26 @@ class UserData:
         self.data: Dict[int, Dict] = self._load_data()
 
     def _load_data(self) -> Dict[int, Dict]:
-        if os.path.exists(self.file_path):
-            with open(self.file_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {}
+        try:
+            if os.path.exists(self.file_path):
+                with open(self.file_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            return {}
+        except Exception as e:
+            print(f"Ошибка при загрузке данных: {str(e)}")
+            return {}
 
     def _save_data(self):
-        with open(self.file_path, 'w', encoding='utf-8') as f:
-            json.dump(self.data, f, ensure_ascii=False, indent=4)
+        try:
+            # Создаем директорию, если её нет
+            os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+            
+            # Сохраняем данные
+            with open(self.file_path, 'w', encoding='utf-8') as f:
+                json.dump(self.data, f, ensure_ascii=False, indent=4)
+            print(f"Данные успешно сохранены в {self.file_path}")
+        except Exception as e:
+            print(f"Ошибка при сохранении данных: {str(e)}")
 
     def add_user(self, user_id: int, wb_token: str):
         self.data[user_id] = {
