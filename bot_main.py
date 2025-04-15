@@ -55,7 +55,7 @@ class WBStockBot:
         self.timezone = pytz.timezone('Europe/Moscow')
         self.application = application
         self.active_jobs = {}
-        self.user_data = UserData('/app/user_data/user_data.json')
+        self.user_data = UserData()
 
     # Проверка на рабочее время
     def is_working_time(self):
