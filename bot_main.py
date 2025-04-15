@@ -509,7 +509,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         table += "------------------------------------------------\n"
                         
                         for box in boxes:
-                            date = datetime.fromisoformat(box['date']).strftime('%d.%m.%Y')
+                            date = datetime.fromisoformat(box['date']).strftime('%d\\.%m\\.%Y')
                             if box['coefficient'] >= coefficient:
                                 warehouse = box['warehouseName'][:25].ljust(25)
                                 table += f"{warehouse} {date}  {str(box['coefficient']).ljust(10)}\n"
