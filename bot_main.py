@@ -293,7 +293,7 @@ class WBStockBot:
 
             # Формируем таблицу
             table = f"📊 Товары с коэффициентом ≤ {coefficient}:\n\n"
-            table += "```\n"
+            table += "<pre>"
             table += "Артикул    Название                     Количество  Коэффициент\n"
             table += "--------------------------------------------------------------\n"
 
@@ -301,12 +301,12 @@ class WBStockBot:
                 name = data['name'][:30] if len(data['name']) > 30 else data['name'].ljust(30)
                 table += f"{str(nm_id).ljust(10)} {name} {str(data['quantity']).ljust(10)} {str(data['coefficient']).ljust(10)}\n"
             
-            table += "```"
+            table += "</pre>"
 
             # Разбиваем сообщение на части и отправляем
             message_parts = await self.split_message(table)
             for part in message_parts:
-                await update.message.reply_text(part, parse_mode='MarkdownV2')
+                await update.message.reply_text(part, parse_mode='HTML')
                 await asyncio.sleep(1)  # Задержка между сообщениями
 
         except Exception as e:
