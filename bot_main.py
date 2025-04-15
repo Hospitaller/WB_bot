@@ -10,6 +10,7 @@ import pytz
 import signal
 from dotenv import load_dotenv
 from user_data import UserData
+from itertools import islice
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -226,6 +227,29 @@ class WBStockBot:
             logger.critical(f"CRITICAL: Ошибка остановки периодических проверок: {str(e)}", exc_info=True)
             raise
 
+async def split_message(text: str, max_length: int = 4000) -> list[str]:
+    """Разбивает длинное сообщение на части"""
+    if len(text) <= max_length:
+        return [text]
+    
+    parts = []
+    current_part = ""
+    lines = text.split('\n')
+    
+    for line in lines:
+        if len(current_part) + len(line) + 1 > max_length:
+            parts.append(current_part)
+            current_part = line
+        else:
+            if current_part:
+                current_part += '\n'
+            current_part += line
+    
+    if current_part:
+        parts.append(current_part)
+    
+    return parts
+
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -404,9 +428,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             if box['coefficient'] >= coefficient:
                                 table += f"| {box['warehouseName']} | {date} | {box['coefficient']} |\n"
                         
-                        await update.message.reply_text(
+                        # Разбиваем сообщение на части
+                        message_parts = await split_message(
                             f"📊 Результаты по поставкам (коэффициент ≥ {coefficient}%):\n\n{table}"
                         )
+                        
+                        # Отправляем каждую часть
+                        for part in message_parts:
+                            await update.message.reply_text(part)
+                            await asyncio.sleep(0.5)  # Небольшая задержка между сообщениями
                         
             except ValueError as e:
                 await update.message.reply_text(f"❌ Ошибка: {str(e)}")
