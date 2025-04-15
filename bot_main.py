@@ -503,8 +503,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         boxes = [item for item in data if item.get('boxTypeName') == 'Короба']
                         
                         # Группируем данные
-                        table = "📊 Результаты по поставкам (коэффициент ≥ {coefficient}%):\n\n"
-                        table += "<pre>"
+                        table = f"📊 Результаты по поставкам \\(коэффициент ≥ {coefficient}%\\):\n\n"
+                        table += "```\n"
                         table += "Склад                      Дата       Коэффициент\n"
                         table += "------------------------------------------------\n"
                         
@@ -514,14 +514,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 warehouse = box['warehouseName'][:25].ljust(25)
                                 table += f"{warehouse} {date}  {str(box['coefficient']).ljust(10)}\n"
                         
-                        table += "</pre>"
+                        table += "```"
                         
                         # Разбиваем сообщение на части
                         message_parts = await split_message(table)
                         
                         # Отправляем каждую часть
                         for part in message_parts:
-                            await update.message.reply_text(part, parse_mode='HTML')
+                            await update.message.reply_text(part, parse_mode='MarkdownV2')
                             await asyncio.sleep(0.5)  # Небольшая задержка между сообщениями
                         
             except ValueError as e:
