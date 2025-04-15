@@ -503,20 +503,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         boxes = [item for item in data if item.get('boxTypeName') == 'Короба']
                         
                         # Группируем данные
-                        table = "| склад | дата | Коэф, % |\n| --- | --- | --- |\n"
+                        table = "📊 Результаты по поставкам (коэффициент ≥ {coefficient}%):\n\n"
+                        table += "<pre>"
+                        table += "Склад                      Дата       Коэффициент\n"
+                        table += "------------------------------------------------\n"
+                        
                         for box in boxes:
                             date = datetime.fromisoformat(box['date']).strftime('%d.%m.%Y')
                             if box['coefficient'] >= coefficient:
-                                table += f"| {box['warehouseName']} | {date} | {box['coefficient']} |\n"
+                                warehouse = box['warehouseName'][:25].ljust(25)
+                                table += f"{warehouse} {date}  {str(box['coefficient']).ljust(10)}\n"
+                        
+                        table += "</pre>"
                         
                         # Разбиваем сообщение на части
-                        message_parts = await split_message(
-                            f"📊 Результаты по поставкам (коэффициент ≥ {coefficient}%):\n\n{table}"
-                        )
+                        message_parts = await split_message(table)
                         
                         # Отправляем каждую часть
                         for part in message_parts:
-                            await update.message.reply_text(part)
+                            await update.message.reply_text(part, parse_mode='HTML')
                             await asyncio.sleep(0.5)  # Небольшая задержка между сообщениями
                         
             except ValueError as e:
