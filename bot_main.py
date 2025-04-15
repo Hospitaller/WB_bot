@@ -293,14 +293,17 @@ class WBStockBot:
 
             # Формируем таблицу
             table = f"📊 Товары с коэффициентом ≤ {coefficient}:\n\n"
-            table += "```\n"
-            table += f"{'Артикул':<10} | {'Название':<30} | {'Количество':<10} | {'Коэффициент':<10}\n"
-            table += "-" * 70 + "\n"
+            table += "`"  # Начало блока моноширинного текста
+            table += "┌──────────┬──────────────────────────────┬────────────┬────────────┐\n"
+            table += "│ Артикул  │ Название                     │ Количество │ Коэффициент│\n"
+            table += "├──────────┼──────────────────────────────┼────────────┼────────────┤\n"
 
             for nm_id, data in sorted_products.items():
-                table += f"{str(nm_id):<10} | {data['name'][:30]:<30} | {str(data['quantity']):<10} | {str(data['coefficient']):<10}\n"
+                name = data['name'][:30] if len(data['name']) > 30 else data['name'].ljust(30)
+                table += f"│ {str(nm_id).ljust(8)} │ {name} │ {str(data['quantity']).ljust(10)} │ {str(data['coefficient']).ljust(10)}│\n"
             
-            table += "```"
+            table += "└──────────┴──────────────────────────────┴────────────┴────────────┘"
+            table += "`"  # Конец блока моноширинного текста
 
             # Разбиваем сообщение на части и отправляем
             message_parts = await self.split_message(table)
