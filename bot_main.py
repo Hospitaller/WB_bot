@@ -21,10 +21,10 @@ CONFIG = {
         'first': "https://seller-analytics-api.wildberries.ru/api/v1/warehouse_remains?groupBySa=true",
         'second': "https://seller-analytics-api.wildberries.ru/api/v1/warehouse_remains/tasks/{task_id}/download"
     },
-    'LOW_STOCK_THRESHOLD': 20,
+    'LOW_STOCK_THRESHOLD': 20, # нижнийпорог остатков
     'WORKING_HOURS': "08-22",  # Часы работы (МСК)
     'CHECK_INTERVAL': 120,  # Интервал проверки в минутах
-    'DELAY_BETWEEN_REQUESTS': 30,
+    'DELAY_BETWEEN_REQUESTS': 20,
     'LOG_FILE': 'wb_bot_critical.log'
 }
 
@@ -120,7 +120,7 @@ class WBStockBot:
             
             timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                await context.bot.send_message(chat_id=chat_id, text="🔄 Автоматическая проверка остатков...")
+                await context.bot.send_message(chat_id=chat_id, text="🔄 Считаю остатки...")
                 first_response = await self.make_api_request(session, CONFIG['API_URLS']['first'], headers, context, chat_id)
                 
                 if not first_response:
@@ -276,7 +276,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if query.data == 'new_user':
             await query.message.reply_text(
-                "🔑 Пожалуйста, введите ваш токен WB:"
+                "🔑 Пожалуйста, введите ваш токен WB (Аналитика):"
             )
             context.user_data['waiting_for_token'] = True
             return
