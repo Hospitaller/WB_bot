@@ -261,7 +261,7 @@ class WBStockBot:
                 
                 for item in response:
                     # Проверяем условия фильтрации
-                    if (item.get('boxTypeName') == "Короб" and 
+                    if (item.get('boxTypeName') == "Короба" and 
                         item.get('coefficient') != -1 and 
                         item.get('coefficient') <= 6):
                         
