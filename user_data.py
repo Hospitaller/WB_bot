@@ -11,30 +11,30 @@ class UserData:
     def _load_data(self) -> Dict[int, Dict]:
         data = {}
         for key, value in os.environ.items():
-            if key.startswith('WB_TOKEN_'):
-                user_id = int(key.replace('WB_TOKEN_', ''))
+            if key.startswith('AUTH_TOKEN_'):
+                user_id = int(key.replace('AUTH_TOKEN_', ''))
                 data[user_id] = {
-                    'wb_token': value,
+                    'auth_token': value,
                     'auto_check_enabled': False
                 }
         return data
 
-    def add_user(self, user_id: int, wb_token: str):
-        env_key = f'WB_TOKEN_{user_id}'
-        set_key(self.env_file, env_key, wb_token)
+    def add_user(self, user_id: int, auth_token: str):
+        env_key = f'AUTH_TOKEN_{user_id}'
+        set_key(self.env_file, env_key, auth_token)
         load_dotenv(self.env_file, override=True)
         self.data[user_id] = {
-            'wb_token': wb_token,
+            'auth_token': auth_token,
             'auto_check_enabled': False
         }
 
     def get_user_token(self, user_id: int) -> Optional[str]:
         load_dotenv(self.env_file, override=True)
-        return os.getenv(f'WB_TOKEN_{user_id}')
+        return os.getenv(f'AUTH_TOKEN_{user_id}')
 
     def is_user_exists(self, user_id: int) -> bool:
         load_dotenv(self.env_file, override=True)
-        return f'WB_TOKEN_{user_id}' in os.environ
+        return f'AUTH_TOKEN_{user_id}' in os.environ
 
     def set_auto_check_status(self, user_id: int, status: bool):
         if user_id in self.data:
@@ -44,7 +44,7 @@ class UserData:
         return self.data.get(user_id, {}).get('auto_check_enabled', False)
 
     def remove_user(self, user_id: int):
-        env_key = f'WB_TOKEN_{user_id}'
+        env_key = f'AUTH_TOKEN_{user_id}'
         unset_key(self.env_file, env_key)
         load_dotenv(self.env_file, override=True)
         if user_id in self.data:

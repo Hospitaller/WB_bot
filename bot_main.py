@@ -26,6 +26,8 @@ CONFIG = {
     'WORKING_HOURS': "08-22",  # Часы работы (МСК)
     'CHECK_INTERVAL': 120,  # Интервал проверки в минутах
     'DELAY_BETWEEN_REQUESTS': 20,
+    'MIN_COEFFICIENT': 0,
+    'MAX_COEFFICIENT': 6,
     'LOG_FILE': 'wb_bot_critical.log'
 }
 
@@ -232,10 +234,10 @@ class WBStockBot:
         chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
         
         try:
-            # Получаем токен из переменной окружения
-            wb_token = os.getenv('AUTH_TOKEN_Analytics')
+            # Получаем токен пользователя
+            wb_token = self.user_data.get_user_token(chat_id)
             if not wb_token:
-                await context.bot.send_message(chat_id=chat_id, text="❌ Токен AUTH_TOKEN_Analytics не найден в .env файле")
+                await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден. Пожалуйста, добавьте токен через команду /start. Требуются права Статистика, Аналитика, Поставки")
                 return
 
             headers = {
@@ -262,8 +264,8 @@ class WBStockBot:
                 for item in response:
                     # Проверяем условия фильтрации
                     if (item.get('boxTypeName') == "Короба" and 
-                        item.get('coefficient') != -1 and 
-                        item.get('coefficient') <= 6):
+                        item.get('coefficient') >= CONFIG['MIN_COEFFICIENT'] and 
+                        item.get('coefficient') <= CONFIG['MAX_COEFFICIENT']):
                         
                         warehouse_name = item.get('warehouseName', 'N/A')
                         date = item.get('date', 'N/A')
@@ -324,14 +326,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise Exception("Бот не инициализирован")
 
         user_id = update.effective_user.id
-        keyboard = [
-            [InlineKeyboardButton("🚀 START", callback_data='start_bot')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "Нажмите START для начала работы с ботом",
-            reply_markup=reply_markup
-        )
+        if not bot.user_data.is_user_exists(user_id):
+            keyboard = [
+                [InlineKeyboardButton("➕ Новый пользователь", callback_data='new_user')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                "👋 Привет! Я бот для работы с Wildberries.\n"
+                "Для начала работы необходимо добавить ваш токен AUTH_TOKEN.\n"
+                "Требуется токен WB Статистика, Аналитика, Поставки",
+                reply_markup=reply_markup
+            )
+        else:
+            keyboard = [
+                [
+                    InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
+                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
+                ],
+                [
+                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto'),
+                    InlineKeyboardButton("📊 Доступность", callback_data='coefficients')
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                "Выберите действие:",
+                reply_markup=reply_markup
+            )
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в start: {str(e)}", exc_info=True)
 
@@ -354,8 +375,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.edit_text(
-                    "👋 Привет! Я бот для мониторинга остатков Wildberries.\n"
-                    "Для начала работы необходимо добавить ваш токен WB.",
+                    "👋 Привет! Я бот для работы с Wildberries.\n"
+                    "Для начала работы необходимо добавить ваш токен AUTH_TOKEN.\n"
+                    "Требуется токен WB Статистика, Аналитика, Поставки",
                     reply_markup=reply_markup
                 )
             else:
@@ -378,7 +400,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         if query.data == 'new_user':
             await query.message.edit_text(
-                "🔑 Пожалуйста, введите ваш токен WB (Аналитика):"
+                "🔑 Пожалуйста, введите ваш токен WB:"
             )
             context.user_data['waiting_for_token'] = True
             return
@@ -451,7 +473,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             await update.message.reply_text(
                 "✅ Токен успешно добавлен!\n"
-                "Теперь вы можете использовать бота.",
+                "Теперь вы можете использовать бота. Удачи!",
                 reply_markup=reply_markup
             )
         else:
