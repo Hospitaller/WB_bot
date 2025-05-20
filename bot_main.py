@@ -271,7 +271,9 @@ class WBStockBot:
                         
                         # Преобразуем дату в формат дд-мм-гг
                         try:
-                            date_obj = datetime.strptime(date, '%Y-%m-%d')
+                            # Убираем 'Z' и парсим ISO формат
+                            date = date.replace('Z', '')
+                            date_obj = datetime.fromisoformat(date)
                             formatted_date = date_obj.strftime('%d-%m-%y')
                         except:
                             formatted_date = date
