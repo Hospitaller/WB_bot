@@ -298,21 +298,21 @@ class WBStockBot:
                 
                 for warehouse_name, dates in filtered_data.items():
                     # Формируем строку с датами для текущего склада
-                    new_line = f"{warehouse_name}:\n"
+                    new_line = f"*{warehouse_name}*:\n"
                     for item in dates:
                         new_line += f"--- {item['date']} = {item['coefficient']}\n"
                     new_line += "\n"
                     
                     # Если добавление новой строки превысит лимит, отправляем текущее сообщение
                     if len(current_message) + len(new_line) > MAX_MESSAGE_LENGTH:
-                        await context.bot.send_message(chat_id=chat_id, text=current_message)
+                        await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode='Markdown')
                         current_message = new_line
                     else:
                         current_message += new_line
                 
                 # Отправляем оставшуюся часть сообщения, если она есть
                 if current_message:
-                    await context.bot.send_message(chat_id=chat_id, text=current_message)
+                    await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode='Markdown')
                 
         except Exception as e:
             logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
@@ -333,8 +333,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
                 "👋 Привет! Я бот для работы с Wildberries.\n"
-                "Для начала работы необходимо добавить ваш токен AUTH_TOKEN.\n"
-                "Требуется токен WB Статистика, Аналитика, Поставки",
+                "Для начала работы необходимо добавить ваш WB токен:\n"
+                "Статистика, Аналитика, Поставки",
                 reply_markup=reply_markup
             )
         else:
@@ -376,8 +376,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.message.edit_text(
                     "👋 Привет! Я бот для работы с Wildberries.\n"
-                    "Для начала работы необходимо добавить ваш токен AUTH_TOKEN.\n"
-                    "Требуется токен WB Статистика, Аналитика, Поставки",
+                    "Для начала работы необходимо добавить ваш WB токен:\n"
+                    "Статистика, Аналитика, Поставки",
                     reply_markup=reply_markup
                 )
             else:
@@ -477,13 +477,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
         else:
-            keyboard = [
-                [InlineKeyboardButton("🚀 START", callback_data='start_bot')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                "Нажмите START для начала работы с ботом",
-                reply_markup=reply_markup
+                "Используйте команду /start для начала работы с ботом"
             )
             
     except Exception as e:
