@@ -256,14 +256,39 @@ class WBStockBot:
                 # Добавляем задержку в 30 секунд
                 await asyncio.sleep(30)
                 
-                # Разбиваем ответ на части по 4000 символов
-                MAX_MESSAGE_LENGTH = 4000
-                current_message = "📊 Коэффициенты складов:\n"
+                # Фильтруем и группируем данные
+                filtered_data = {}
                 
                 for item in response:
-                    warehouse_name = item.get('warehouseName', 'N/A')
-                    coefficient = item.get('coefficient', 'N/A')
-                    new_line = f"{warehouse_name}-{coefficient}\n"
+                    # Проверяем условия фильтрации
+                    if (item.get('boxTypeName') == "Короб" and 
+                        item.get('coefficient') != -1 and 
+                        item.get('coefficient') <= 6):
+                        
+                        warehouse_name = item.get('warehouseName', 'N/A')
+                        date = item.get('date', 'N/A')
+                        coefficient = item.get('coefficient', 'N/A')
+                        
+                        if warehouse_name not in filtered_data:
+                            filtered_data[warehouse_name] = []
+                        
+                        filtered_data[warehouse_name].append({
+                            'date': date,
+                            'coefficient': coefficient
+                        })
+                
+                # Сортируем данные по дате для каждого склада
+                for warehouse in filtered_data:
+                    filtered_data[warehouse].sort(key=lambda x: x['date'])
+                
+                # Формируем сообщение
+                MAX_MESSAGE_LENGTH = 4000
+                current_message = "📊 Коэффициенты складов (Короб):\n\n"
+                
+                for warehouse_name, dates in filtered_data.items():
+                    # Формируем строку с датами для текущего склада
+                    dates_str = ", ".join([f"{item['date']}-{item['coefficient']}" for item in dates])
+                    new_line = f"{warehouse_name}: {dates_str}\n\n"
                     
                     # Если добавление новой строки превысит лимит, отправляем текущее сообщение
                     if len(current_message) + len(new_line) > MAX_MESSAGE_LENGTH:
