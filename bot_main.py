@@ -252,6 +252,8 @@ class WBStockBot:
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить данные о коэффициентах")
                     return
                 
+                await asyncio.sleep(30)
+                
                 coefficients_text = "📊 Коэффициенты складов:\n"
                 for item in response:
                     warehouse_name = item.get('warehouseName', 'N/A')
@@ -272,31 +274,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise Exception("Бот не инициализирован")
 
         user_id = update.effective_user.id
-        if not bot.user_data.is_user_exists(user_id):
-            keyboard = [
-                [InlineKeyboardButton("➕ Новый пользователь", callback_data='new_user')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(
-                "👋 Привет! Я бот для мониторинга остатков Wildberries.\n"
-                "Для начала работы необходимо добавить ваш токен WB.",
-                reply_markup=reply_markup
-            )
-        else:
-            keyboard = [
-                [
-                    InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
-                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
-                ],
-                [
-                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto')
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(
-                "Выберите действие:",
-                reply_markup=reply_markup
-            )
+        keyboard = [
+            [InlineKeyboardButton("🚀 START", callback_data='start_bot')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "Нажмите START для начала работы с ботом",
+            reply_markup=reply_markup
+        )
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в start: {str(e)}", exc_info=True)
 
@@ -312,8 +297,37 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         user_id = update.effective_user.id
         
+        if query.data == 'start_bot':
+            if not bot.user_data.is_user_exists(user_id):
+                keyboard = [
+                    [InlineKeyboardButton("➕ Новый пользователь", callback_data='new_user')]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.message.edit_text(
+                    "👋 Привет! Я бот для мониторинга остатков Wildberries.\n"
+                    "Для начала работы необходимо добавить ваш токен WB.",
+                    reply_markup=reply_markup
+                )
+            else:
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
+                        InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
+                    ],
+                    [
+                        InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto'),
+                        InlineKeyboardButton("📊 Доступность", callback_data='coefficients')
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.message.edit_text(
+                    "Выберите действие:",
+                    reply_markup=reply_markup
+                )
+            return
+            
         if query.data == 'new_user':
-            await query.message.reply_text(
+            await query.message.edit_text(
                 "🔑 Пожалуйста, введите ваш токен WB (Аналитика):"
             )
             context.user_data['waiting_for_token'] = True
@@ -347,6 +361,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.message.reply_text("ℹ️ Нет активных автоматических проверок")
                 
+        elif query.data == 'coefficients':
+            class FakeContext:
+                def __init__(self, chat_id, bot):
+                    self._chat_id = chat_id
+                    self.bot = bot
+            fake_context = FakeContext(update.effective_chat.id, context.bot)
+            await bot.get_warehouse_coefficients(fake_context)
+                
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
         await query.message.reply_text("❌ Произошла критическая ошибка")
@@ -371,7 +393,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
                 ],
                 [
-                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto')
+                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto'),
+                    InlineKeyboardButton("📊 Доступность", callback_data='coefficients')
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -382,8 +405,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup
             )
         else:
+            keyboard = [
+                [InlineKeyboardButton("🚀 START", callback_data='start_bot')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                "Используйте команду /start для начала работы с ботом"
+                "Нажмите START для начала работы с ботом",
+                reply_markup=reply_markup
             )
             
     except Exception as e:
