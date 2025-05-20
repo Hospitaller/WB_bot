@@ -269,26 +269,35 @@ class WBStockBot:
                         date = item.get('date', 'N/A')
                         coefficient = item.get('coefficient', 'N/A')
                         
+                        # Преобразуем дату в формат дд-мм-гг
+                        try:
+                            date_obj = datetime.strptime(date, '%Y-%m-%d')
+                            formatted_date = date_obj.strftime('%d-%m-%y')
+                        except:
+                            formatted_date = date
+                        
                         if warehouse_name not in filtered_data:
                             filtered_data[warehouse_name] = []
                         
                         filtered_data[warehouse_name].append({
-                            'date': date,
+                            'date': formatted_date,
                             'coefficient': coefficient
                         })
                 
                 # Сортируем данные по дате для каждого склада
                 for warehouse in filtered_data:
-                    filtered_data[warehouse].sort(key=lambda x: x['date'])
+                    filtered_data[warehouse].sort(key=lambda x: datetime.strptime(x['date'], '%d-%m-%y'))
                 
                 # Формируем сообщение
                 MAX_MESSAGE_LENGTH = 4000
-                current_message = "📊 Коэффициенты складов (Короб):\n\n"
+                current_message = "📊 Коэффициенты складов (Короба):\n\n"
                 
                 for warehouse_name, dates in filtered_data.items():
                     # Формируем строку с датами для текущего склада
-                    dates_str = ", ".join([f"{item['date']}-{item['coefficient']}" for item in dates])
-                    new_line = f"{warehouse_name}: {dates_str}\n\n"
+                    new_line = f"{warehouse_name}:\n"
+                    for item in dates:
+                        new_line += f"--- {item['date']} = {item['coefficient']}\n"
+                    new_line += "\n"
                     
                     # Если добавление новой строки превысит лимит, отправляем текущее сообщение
                     if len(current_message) + len(new_line) > MAX_MESSAGE_LENGTH:
