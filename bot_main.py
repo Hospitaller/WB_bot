@@ -232,9 +232,10 @@ class WBStockBot:
         chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
         
         try:
-            wb_token = self.user_data.get_user_token(chat_id)
+            # Получаем токен из переменной окружения
+            wb_token = os.getenv('AUTH_TOKEN_Analytics')
             if not wb_token:
-                await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден. Пожалуйста, добавьте токен через команду /start")
+                await context.bot.send_message(chat_id=chat_id, text="❌ Токен AUTH_TOKEN_Analytics не найден в .env файле")
                 return
 
             headers = {
@@ -252,6 +253,7 @@ class WBStockBot:
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить данные о коэффициентах")
                     return
                 
+                # Добавляем задержку в 30 секунд
                 await asyncio.sleep(30)
                 
                 coefficients_text = "📊 Коэффициенты складов:\n"
