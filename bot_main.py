@@ -256,13 +256,25 @@ class WBStockBot:
                 # Добавляем задержку в 30 секунд
                 await asyncio.sleep(30)
                 
-                coefficients_text = "📊 Коэффициенты складов:\n"
+                # Разбиваем ответ на части по 4000 символов
+                MAX_MESSAGE_LENGTH = 4000
+                current_message = "📊 Коэффициенты складов:\n"
+                
                 for item in response:
                     warehouse_name = item.get('warehouseName', 'N/A')
                     coefficient = item.get('coefficient', 'N/A')
-                    coefficients_text += f"{warehouse_name}-{coefficient}\n"
+                    new_line = f"{warehouse_name}-{coefficient}\n"
+                    
+                    # Если добавление новой строки превысит лимит, отправляем текущее сообщение
+                    if len(current_message) + len(new_line) > MAX_MESSAGE_LENGTH:
+                        await context.bot.send_message(chat_id=chat_id, text=current_message)
+                        current_message = new_line
+                    else:
+                        current_message += new_line
                 
-                await context.bot.send_message(chat_id=chat_id, text=coefficients_text)
+                # Отправляем оставшуюся часть сообщения, если она есть
+                if current_message:
+                    await context.bot.send_message(chat_id=chat_id, text=current_message)
                 
         except Exception as e:
             logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
