@@ -19,7 +19,8 @@ CONFIG = {
     'TG_API_KEY': os.getenv('TG_API_KEY'),
     'API_URLS': {
         'first': "https://seller-analytics-api.wildberries.ru/api/v1/warehouse_remains?groupBySa=true",
-        'second': "https://seller-analytics-api.wildberries.ru/api/v1/warehouse_remains/tasks/{task_id}/download"
+        'second': "https://seller-analytics-api.wildberries.ru/api/v1/warehouse_remains/tasks/{task_id}/download",
+        'coefficients': "https://supplies-api.wildberries.ru/api/v1/acceptance/coefficients"
     },
     'LOW_STOCK_THRESHOLD': 20, # нижнийпорог остатков
     'WORKING_HOURS': "08-22",  # Часы работы (МСК)
@@ -226,6 +227,43 @@ class WBStockBot:
             logger.critical(f"CRITICAL: Ошибка остановки периодических проверок: {str(e)}", exc_info=True)
             raise
 
+    async def get_warehouse_coefficients(self, context: ContextTypes.DEFAULT_TYPE):
+        """Получение коэффициентов складов"""
+        chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
+        
+        try:
+            wb_token = self.user_data.get_user_token(chat_id)
+            if not wb_token:
+                await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден. Пожалуйста, добавьте токен через команду /start")
+                return
+
+            headers = {
+                'Accept': 'application/json',
+                'Authorization': wb_token
+            }
+            
+            timeout = aiohttp.ClientTimeout(total=60)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                await context.bot.send_message(chat_id=chat_id, text="🔄 Получаю коэффициенты складов...")
+                
+                response = await self.make_api_request(session, CONFIG['API_URLS']['coefficients'], headers, context, chat_id)
+                
+                if not response or not isinstance(response, list):
+                    await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить данные о коэффициентах")
+                    return
+                
+                coefficients_text = "📊 Коэффициенты складов:\n"
+                for item in response:
+                    warehouse_name = item.get('warehouseName', 'N/A')
+                    coefficient = item.get('coefficient', 'N/A')
+                    coefficients_text += f"{warehouse_name}-{coefficient}\n"
+                
+                await context.bot.send_message(chat_id=chat_id, text=coefficients_text)
+                
+        except Exception as e:
+            logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
+            await context.bot.send_message(chat_id=chat_id, text=f"❌ Произошла критическая ошибка: {str(e)}")
+
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -354,32 +392,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Основная функция запуска бота
 def main():
-    try:
-        application = Application.builder().token(CONFIG['TG_API_KEY']).build()
-        
-        # Инициализация бота
-        application.bot_data['wb_bot'] = WBStockBot(application)
-        
-        # Регистрация обработчиков
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CallbackQueryHandler(button_handler))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        
-        # Обработчик сигналов завершения
-        def signal_handler(signum, frame):
-            print("\nБот остановлен")
-            asyncio.create_task(application.stop())
-        
-        # Регистрация обработчиков сигналов
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
-        print("Бот запущен")
-        application.run_polling()
-
-    except Exception as e:
-        logger.critical(f"CRITICAL: Ошибка при запуске бота: {str(e)}", exc_info=True)
-        raise
+    """Запуск бота"""
+    application = Application.builder().token(CONFIG['TG_API_KEY']).build()
+    bot = WBStockBot(application)
+    application.bot_data['wb_bot'] = bot
+    
+    # Регистрация обработчиков
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("coefficients", lambda update, context: bot.get_warehouse_coefficients(context)))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Обработчик сигналов завершения
+    def signal_handler(signum, frame):
+        print("\nБот остановлен")
+        asyncio.create_task(application.stop())
+    
+    # Регистрация обработчиков сигналов
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    print("Бот запущен")
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
