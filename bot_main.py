@@ -263,65 +263,81 @@ class WBStockBot:
                     excluded_str = str(CONFIG['EX_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
                     excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
                 
-                logger.info(f"Target warehouses: {target_warehouses}")
-                logger.info(f"Excluded warehouses: {excluded_warehouses}")
+                filter_logger.info("="*50)
+                filter_logger.info("Начало обработки данных")
+                filter_logger.info(f"Target warehouses: {target_warehouses}")
+                filter_logger.info(f"Excluded warehouses: {excluded_warehouses}")
                 
                 # Фильтруем и группируем данные
                 filtered_data = {}
-                
-                # Выводим первую запись для проверки структуры
-                if response:
-                    print("Пример структуры данных:", json.dumps(response[0], indent=2, ensure_ascii=False))
+                total_processed = 0
+                excluded_count = 0
                 
                 for item in response:
+                    total_processed += 1
                     # Получаем ID склада и преобразуем его в число
                     warehouse_id = None
                     try:
                         # Проверяем все возможные варианты ключа
-                        warehouse_id = item.get('warehouseId') or item.get('warehouse_id') or item.get('id')
-                        if warehouse_id is not None:
-                            warehouse_id = int(warehouse_id)
-                            print(f"Найден warehouse_id: {warehouse_id} для склада {item.get('warehouseName')}")
-                    except (ValueError, TypeError) as e:
-                        print(f"Ошибка преобразования warehouse_id: {e}")
-                        print(f"Значение warehouse_id: {item.get('warehouseId')}")
-                        continue
-                    
-                    # Пропускаем склады из списка исключений
-                    if excluded_warehouses and warehouse_id in excluded_warehouses:
-                        print(f"Пропускаем склад {warehouse_id} (в списке исключений)")
-                        continue
-                    
-                    # Если указаны целевые склады, пропускаем все остальные
-                    if target_warehouses and warehouse_id not in target_warehouses:
-                        print(f"Пропускаем склад {warehouse_id} (не в списке целевых)")
-                        continue
-                    
-                    # Проверяем остальные условия фильтрации
-                    if (item.get('boxTypeName') == "Короба" and 
-                        item.get('coefficient') >= CONFIG['MIN_COEFFICIENT'] and 
-                        item.get('coefficient') <= CONFIG['MAX_COEFFICIENT']):
-                        
+                        warehouse_id = item.get('warehouseId')
+                        if warehouse_id is None:
+                            filter_logger.warning(f"warehouseId не найден в записи: {json.dumps(item, ensure_ascii=False)}")
+                            continue
+                            
+                        warehouse_id = int(warehouse_id)
                         warehouse_name = item.get('warehouseName', 'N/A')
-                        date = item.get('date', 'N/A')
-                        coefficient = item.get('coefficient', 'N/A')
+                        filter_logger.info(f"Обработка склада: ID={warehouse_id}, Name={warehouse_name}")
                         
-                        # Преобразуем дату в формат дд-мм-гг
-                        try:
-                            # Убираем 'Z' и парсим ISO формат
-                            date = date.replace('Z', '')
-                            date_obj = datetime.fromisoformat(date)
-                            formatted_date = date_obj.strftime('%d-%m-%y')
-                        except:
-                            formatted_date = date
+                        # Пропускаем склады из списка исключений
+                        if excluded_warehouses and warehouse_id in excluded_warehouses:
+                            filter_logger.info(f"СКЛАД ИСКЛЮЧЕН: ID={warehouse_id}, Name={warehouse_name}")
+                            excluded_count += 1
+                            continue
                         
-                        if warehouse_name not in filtered_data:
-                            filtered_data[warehouse_name] = []
+                        # Если указаны целевые склады, пропускаем все остальные
+                        if target_warehouses and warehouse_id not in target_warehouses:
+                            filter_logger.info(f"СКЛАД НЕ В ЦЕЛЕВЫХ: ID={warehouse_id}, Name={warehouse_name}")
+                            continue
                         
-                        filtered_data[warehouse_name].append({
-                            'date': formatted_date,
-                            'coefficient': coefficient
-                        })
+                        # Проверяем остальные условия фильтрации
+                        if (item.get('boxTypeName') == "Короба" and 
+                            item.get('coefficient') >= CONFIG['MIN_COEFFICIENT'] and 
+                            item.get('coefficient') <= CONFIG['MAX_COEFFICIENT']):
+                            
+                            date = item.get('date', 'N/A')
+                            coefficient = item.get('coefficient', 'N/A')
+                            
+                            # Преобразуем дату в формат дд-мм-гг
+                            try:
+                                # Убираем 'Z' и парсим ISO формат
+                                date = date.replace('Z', '')
+                                date_obj = datetime.fromisoformat(date)
+                                formatted_date = date_obj.strftime('%d-%m-%y')
+                            except:
+                                formatted_date = date
+                            
+                            if warehouse_name not in filtered_data:
+                                filtered_data[warehouse_name] = []
+                            
+                            filtered_data[warehouse_name].append({
+                                'date': formatted_date,
+                                'coefficient': coefficient
+                            })
+                            filter_logger.info(f"Данные добавлены для склада: ID={warehouse_id}, Name={warehouse_name}")
+                        else:
+                            filter_logger.info(f"Склад не прошел фильтрацию по условиям: ID={warehouse_id}, Name={warehouse_name}")
+                            
+                    except (ValueError, TypeError) as e:
+                        filter_logger.error(f"Ошибка обработки записи: {e}")
+                        filter_logger.error(f"Данные записи: {json.dumps(item, ensure_ascii=False)}")
+                        continue
+                
+                filter_logger.info("="*50)
+                filter_logger.info(f"Итоги обработки:")
+                filter_logger.info(f"Всего обработано записей: {total_processed}")
+                filter_logger.info(f"Исключено складов: {excluded_count}")
+                filter_logger.info(f"Осталось складов после фильтрации: {len(filtered_data)}")
+                filter_logger.info("="*50)
                 
                 # Сортируем данные по дате для каждого склада
                 for warehouse in filtered_data:
