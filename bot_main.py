@@ -255,18 +255,31 @@ class WBStockBot:
                     excluded_str = str(CONFIG['EX_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
                     excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
                 
+                logger.info(f"Target warehouses: {target_warehouses}")
+                logger.info(f"Excluded warehouses: {excluded_warehouses}")
+                
                 # Фильтруем и группируем данные
                 filtered_data = {}
                 
                 for item in response:
-                    warehouse_id = item.get('warehouseId')
+                    # Получаем ID склада и преобразуем его в число
+                    warehouse_id = None
+                    try:
+                        warehouse_id = int(item.get('warehouseId', 0))
+                    except (ValueError, TypeError):
+                        logger.warning(f"Не удалось преобразовать warehouseId в число: {item.get('warehouseId')}")
+                        continue
+                    
+                    logger.info(f"Processing warehouse ID: {warehouse_id}")
                     
                     # Пропускаем склады из списка исключений
                     if excluded_warehouses and warehouse_id in excluded_warehouses:
+                        logger.info(f"Пропускаем склад {warehouse_id} (в списке исключений)")
                         continue
                     
                     # Если указаны целевые склады, пропускаем все остальные
                     if target_warehouses and warehouse_id not in target_warehouses:
+                        logger.info(f"Пропускаем склад {warehouse_id} (не в списке целевых)")
                         continue
                     
                     # Проверяем остальные условия фильтрации
