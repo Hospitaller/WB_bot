@@ -599,20 +599,32 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text("🛑 Автоматические проверки остановлены")
             else:
                 await query.message.edit_text("ℹ️ Нет активных автоматических проверок")
-                
-        elif query.data == 'start_bot':
-            if not bot.user_data.is_user_exists(user_id):
-                keyboard = [
-                    [InlineKeyboardButton("➕ Новый пользователь", callback_data='new_user')]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+
+        # Обработка выбора складов
+        elif query.data.startswith('select_warehouse_'):
+            warehouse_id = int(query.data.split('_')[-1])
+            chat_id = update.effective_chat.id
+            
+            if chat_id not in bot.warehouse_selection:
+                bot.warehouse_selection[chat_id] = set()
+            
+            bot.warehouse_selection[chat_id].add(warehouse_id)
+            await bot.show_warehouse_selection(update, context)
+            
+        elif query.data.startswith('warehouse_page_'):
+            page = int(query.data.split('_')[-1])
+            await bot.show_warehouse_selection(update, context, page)
+            
+        elif query.data == 'finish_warehouse_selection':
+            chat_id = update.effective_chat.id
+            if chat_id in bot.warehouse_selection and bot.warehouse_selection[chat_id]:
+                await bot.start_auto_coefficients(chat_id)
                 await query.message.edit_text(
-                    "👋 Привет! Я бот для работы с Wildberries.\n"
-                    "Для начала работы необходимо добавить ваш WB токен:\n"
-                    "Статистика, Аналитика, Поставки",
-                    reply_markup=reply_markup
+                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
                 )
             else:
+                await query.message.edit_text("❌ Не выбрано ни одного склада")
+                # Возвращаемся в главное меню
                 keyboard = [
                     [
                         InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
@@ -624,46 +636,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.message.edit_text(
-                    "Выберите действие:",
-                    reply_markup=reply_markup
-                )
-            return
-            
-        elif query.data == 'new_user':
-            await query.message.edit_text(
-                "🔑 Пожалуйста, введите ваш токен WB:"
-            )
-            context.user_data['waiting_for_token'] = True
-            return
-            
-        if not bot.user_data.is_user_exists(user_id):
-            await query.message.reply_text(
-                "❌ Сначала необходимо добавить токен WB через команду /start"
-            )
-            return
-            
-        if query.data == 'check_stock':
-            class FakeContext:
-                def __init__(self, chat_id, bot):
-                    self._chat_id = chat_id
-                    self.bot = bot
-            fake_context = FakeContext(update.effective_chat.id, context.bot)
-            await bot.fetch_wb_data(fake_context)
-            
-        elif query.data == 'start_auto_stock':
-            chat_id = update.effective_chat.id
-            await bot.start_periodic_checks(chat_id)
-            await query.message.reply_text(
-                f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_STOCK_INTERVAL']} минут в рабочее время)"
-            )
-            
-        elif query.data == 'stop_auto_stock':
-            chat_id = update.effective_chat.id
-            if await bot.stop_periodic_checks(chat_id):
-                await query.message.reply_text("🛑 Автоматические проверки остановлены")
-            else:
-                await query.message.reply_text("ℹ️ Нет активных автоматических проверок")
+                await query.message.reply_text("Выберите действие:", reply_markup=reply_markup)
                 
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
@@ -753,7 +726,6 @@ def main():
     
     # Регистрация обработчиков callback-запросов
     application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(CallbackQueryHandler(bot.handle_warehouse_selection, pattern="^(select_warehouse_|warehouse_page_|finish_warehouse_selection)"))
     
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
