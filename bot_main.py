@@ -196,7 +196,7 @@ class WBStockBot:
             
             job = self.application.job_queue.run_repeating(
                 callback=self.fetch_wb_data,
-                interval=timedelta(minutes=CONFIG['CHECK_INTERVAL']),
+                interval=timedelta(minutes=CONFIG['CHECK_STOCK_INTERVAL']),
                 first=0,
                 chat_id=chat_id,
                 name=str(chat_id)
@@ -442,7 +442,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id = update.effective_chat.id
             await bot.start_periodic_checks(chat_id)
             await query.message.reply_text(
-                f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_INTERVAL']} минут в рабочее время)"
+                f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_STOCK_INTERVAL']} минут в рабочее время)"
             )
             
         elif query.data == 'stop_auto_stock':
@@ -514,7 +514,7 @@ def main():
     async def start_auto_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await bot.start_periodic_checks(update.effective_chat.id)
         await update.message.reply_text(
-            f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_INTERVAL']} минут в рабочее время)"
+            f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_STOCK_INTERVAL']} минут в рабочее время)"
         )
     
     async def stop_auto_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
