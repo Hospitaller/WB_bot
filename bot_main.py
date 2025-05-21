@@ -241,7 +241,9 @@ class WBStockBot:
             
             timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                await context.bot.send_message(chat_id=chat_id, text="🔄 Получаю коэффициенты складов...")
+                # Отправляем сообщение только если это не автоматическая проверка
+                if not hasattr(context, 'job'):
+                    await context.bot.send_message(chat_id=chat_id, text="🔄 Получаю коэффициенты складов...")
                 
                 response = await self.make_api_request(session, CONFIG['API_URLS']['coefficients'], headers, context, chat_id)
                 
@@ -251,6 +253,7 @@ class WBStockBot:
                 
                 # Подготовка списков ID складов
                 target_warehouses = []
+                target_names = set()  # Для хранения названий целевых складов
                 if CONFIG['TARGET_WAREHOUSE_ID']:
                     target_str = str(CONFIG['TARGET_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
                     target_warehouses = [int(id.strip()) for id in target_str.split(',') if id.strip()]
@@ -260,13 +263,13 @@ class WBStockBot:
                     target_warehouses.extend(self.warehouse_selection[chat_id])
                 
                 excluded_warehouses = []
+                excluded_names = set()
                 if CONFIG['EX_WAREHOUSE_ID']:
                     excluded_str = str(CONFIG['EX_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
                     excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
                 
                 # Фильтруем и группируем данные
                 filtered_data = {}
-                excluded_names = set()
                 
                 for item in response:
                     warehouse_id = None
@@ -277,6 +280,10 @@ class WBStockBot:
                             
                         warehouse_id = int(warehouse_id)
                         warehouse_name = item.get('warehouseName', 'N/A')
+                        
+                        # Собираем названия целевых складов
+                        if warehouse_id in target_warehouses:
+                            target_names.add(warehouse_name)
                         
                         # Пропускаем склады из списка исключений
                         if excluded_warehouses and warehouse_id in excluded_warehouses:
@@ -322,9 +329,9 @@ class WBStockBot:
                 current_message = "📊 Коэффициенты складов (Короба):\n\n"
                 
                 # Добавляем информацию о фильтрации
-                if target_warehouses:
-                    current_message += f"*Целевые склады:* {', '.join(map(str, target_warehouses))}\n"
-                if excluded_warehouses:
+                if target_names:
+                    current_message += f"*Целевые склады:* {', '.join(sorted(target_names))}\n"
+                if excluded_names:
                     current_message += f"*Исключенные склады:* {', '.join(sorted(excluded_names))}\n"
                 current_message += "\n"
                 
@@ -509,23 +516,12 @@ class WBStockBot:
             if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
                 await self.start_auto_coefficients(chat_id)
                 await query.message.edit_text(
-                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
+                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут(ы) в рабочее время)"
                 )
             else:
                 await query.message.edit_text("❌ Не выбрано ни одного склада")
-                # Возвращаемся в главное меню
-                keyboard = [
-                    [
-                        InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
-                        InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto_stock')
-                    ],
-                    [
-                        InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto_stock'),
-                        InlineKeyboardButton("📊 Доступность", callback_data='check_coefficients')
-                    ]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.message.reply_text("Выберите действие:", reply_markup=reply_markup)
+                # Вызываем команду /start
+                await start(update, context)
 
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -587,7 +583,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await bot.start_auto_coefficients(update.effective_chat.id)
                     await query.message.edit_text(
-                        f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
+                        f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут(ы) в рабочее время)"
                     )
             except Exception as e:
                 logger.critical(f"CRITICAL: Ошибка в start_auto_coefficients: {str(e)}", exc_info=True)
@@ -619,7 +615,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if chat_id in bot.warehouse_selection and bot.warehouse_selection[chat_id]:
                 await bot.start_auto_coefficients(chat_id)
                 await query.message.edit_text(
-                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
+                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут(ы) в рабочее время)"
                 )
             else:
                 await query.message.edit_text("❌ Не выбрано ни одного склада")
@@ -691,7 +687,7 @@ def main():
     async def start_auto_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await bot.start_periodic_checks(update.effective_chat.id)
         await update.message.reply_text(
-            f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_STOCK_INTERVAL']} минут в рабочее время)"
+            f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_STOCK_INTERVAL']} минут(ы) в рабочее время)"
         )
     
     async def stop_auto_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
