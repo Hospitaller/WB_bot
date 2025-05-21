@@ -389,7 +389,8 @@ class WBStockBot:
         try:
             wb_token = self.user_data.get_user_token(chat_id)
             if not wb_token:
-                await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден")
+                if hasattr(context, 'bot'):
+                    await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден")
                 return None
 
             headers = {
@@ -416,52 +417,67 @@ class WBStockBot:
             return None
 
     async def show_warehouse_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE, page=0):
-        chat_id = update.effective_chat.id
-        warehouses = await self.get_warehouse_list(context)
-        
-        if not warehouses:
-            await update.message.reply_text("❌ Не удалось получить список складов")
-            return
-        
-        # Сортируем склады по имени
-        sorted_warehouses = dict(sorted(warehouses.items(), key=lambda x: x[1]))
-        
-        # Получаем уже выбранные склады
-        selected_warehouses = self.warehouse_selection.get(chat_id, set())
-        
-        # Фильтруем уже выбранные склады
-        available_warehouses = {k: v for k, v in sorted_warehouses.items() if k not in selected_warehouses}
-        
-        # Разбиваем на страницы по 25 складов
-        warehouse_items = list(available_warehouses.items())
-        total_pages = (len(warehouse_items) + 24) // 25
-        start_idx = page * 25
-        end_idx = min(start_idx + 25, len(warehouse_items))
-        
-        keyboard = []
-        for warehouse_id, warehouse_name in warehouse_items[start_idx:end_idx]:
-            keyboard.append([InlineKeyboardButton(f"-- {warehouse_name} --", callback_data=f"select_warehouse_{warehouse_id}")])
-        
-        # Добавляем навигационные кнопки
-        nav_buttons = []
-        if page > 0:
-            nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"warehouse_page_{page-1}"))
-        if page < total_pages - 1:
-            nav_buttons.append(InlineKeyboardButton("Далее ▶️", callback_data=f"warehouse_page_{page+1}"))
-        if nav_buttons:
-            keyboard.append(nav_buttons)
-        
-        keyboard.append([InlineKeyboardButton("✅ Завершить", callback_data="finish_warehouse_selection")])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        message_text = "Выберите склады для мониторинга коэффициентов:\n"
-        if selected_warehouses:
-            message_text += "\nВыбранные склады:\n"
-            for warehouse_id in selected_warehouses:
-                message_text += f"- {warehouses.get(warehouse_id, 'Неизвестный склад')}\n"
-        
-        await update.message.reply_text(message_text, reply_markup=reply_markup)
+        try:
+            chat_id = update.effective_chat.id
+            warehouses = await self.get_warehouse_list(context)
+            
+            if not warehouses:
+                await update.message.reply_text("❌ Не удалось получить список складов")
+                return
+            
+            # Сортируем склады по имени
+            sorted_warehouses = dict(sorted(warehouses.items(), key=lambda x: x[1]))
+            
+            # Получаем уже выбранные склады
+            selected_warehouses = self.warehouse_selection.get(chat_id, set())
+            
+            # Фильтруем уже выбранные склады
+            available_warehouses = {k: v for k, v in sorted_warehouses.items() if k not in selected_warehouses}
+            
+            if not available_warehouses:
+                await update.message.reply_text("❌ Нет доступных складов для выбора")
+                return
+            
+            # Разбиваем на страницы по 25 складов
+            warehouse_items = list(available_warehouses.items())
+            total_pages = (len(warehouse_items) + 24) // 25
+            start_idx = page * 25
+            end_idx = min(start_idx + 25, len(warehouse_items))
+            
+            keyboard = []
+            for warehouse_id, warehouse_name in warehouse_items[start_idx:end_idx]:
+                keyboard.append([InlineKeyboardButton(f"-- {warehouse_name} --", callback_data=f"select_warehouse_{warehouse_id}")])
+            
+            # Добавляем навигационные кнопки
+            nav_buttons = []
+            if page > 0:
+                nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"warehouse_page_{page-1}"))
+            if page < total_pages - 1:
+                nav_buttons.append(InlineKeyboardButton("Далее ▶️", callback_data=f"warehouse_page_{page+1}"))
+            if nav_buttons:
+                keyboard.append(nav_buttons)
+            
+            keyboard.append([InlineKeyboardButton("✅ Завершить", callback_data="finish_warehouse_selection")])
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            message_text = "Выберите склады для мониторинга коэффициентов:\n"
+            if selected_warehouses:
+                message_text += "\nВыбранные склады:\n"
+                for warehouse_id in selected_warehouses:
+                    message_text += f"- {warehouses.get(warehouse_id, 'Неизвестный склад')}\n"
+            
+            if hasattr(update, 'message'):
+                await update.message.reply_text(message_text, reply_markup=reply_markup)
+            else:
+                await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
+                
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в show_warehouse_selection: {str(e)}", exc_info=True)
+            if hasattr(update, 'message'):
+                await update.message.reply_text("❌ Произошла ошибка при получении списка складов")
+            else:
+                await update.callback_query.message.edit_text("❌ Произошла ошибка при получении списка складов")
 
     async def handle_warehouse_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -556,13 +572,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await bot.get_warehouse_coefficients(fake_context)
             
         elif query.data == 'start_auto_coefficients':
-            if not CONFIG['TARGET_WAREHOUSE_ID']:
-                await bot.show_warehouse_selection(update, context)
-            else:
-                await bot.start_auto_coefficients(update.effective_chat.id)
-                await query.message.edit_text(
-                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
-                )
+            try:
+                if not CONFIG['TARGET_WAREHOUSE_ID']:
+                    await bot.show_warehouse_selection(update, context)
+                else:
+                    await bot.start_auto_coefficients(update.effective_chat.id)
+                    await query.message.edit_text(
+                        f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
+                    )
+            except Exception as e:
+                logger.critical(f"CRITICAL: Ошибка в start_auto_coefficients: {str(e)}", exc_info=True)
+                await query.message.edit_text("❌ Произошла ошибка при запуске автоматических проверок")
                 
         elif query.data == 'stop_auto_coefficients':
             if await bot.stop_auto_coefficients(update.effective_chat.id):
