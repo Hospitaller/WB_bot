@@ -467,17 +467,17 @@ class WBStockBot:
             # Добавляем навигационные кнопки
             nav_buttons = []
             if page > 0:
-                nav_buttons.append(InlineKeyboardButton("◀️ *Назад*", callback_data=f"warehouse_page_{page-1}"))
+                nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"warehouse_page_{page-1}"))
             if page < total_pages - 1:
-                nav_buttons.append(InlineKeyboardButton("*Далее* ▶️", callback_data=f"warehouse_page_{page+1}"))
+                nav_buttons.append(InlineKeyboardButton("Далее ▶️", callback_data=f"warehouse_page_{page+1}"))
             if nav_buttons:
                 keyboard.append(nav_buttons)
             
             # Добавляем кнопку удаления последнего склада, если есть выбранные склады
             if selected_warehouses:
-                keyboard.append([InlineKeyboardButton("🗑 *Удалить последний*", callback_data="remove_last_warehouse")])
+                keyboard.append([InlineKeyboardButton("🗑 Удалить последний", callback_data="remove_last_warehouse")])
             
-            keyboard.append([InlineKeyboardButton("✅ *Завершить*", callback_data="finish_warehouse_selection")])
+            keyboard.append([InlineKeyboardButton("✅ Завершить", callback_data="finish_warehouse_selection")])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -488,9 +488,9 @@ class WBStockBot:
                     message_text += f"- {warehouses.get(warehouse_id, 'Неизвестный склад')}\n"
             
             if update.callback_query:
-                await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup, parse_mode='Markdown')
+                await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
             else:
-                await update.message.reply_text(message_text, reply_markup=reply_markup, parse_mode='Markdown')
+                await update.message.reply_text(message_text, reply_markup=reply_markup)
                 
         except Exception as e:
             logger.critical(f"CRITICAL: Ошибка в show_warehouse_selection: {str(e)}", exc_info=True)
@@ -517,13 +517,28 @@ class WBStockBot:
             await self.show_warehouse_selection(update, context, page)
             
         elif query.data == "remove_last_warehouse":
-            if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
-                # Преобразуем множество в список, удаляем последний элемент и создаем новое множество
-                warehouses_list = list(self.warehouse_selection[chat_id])
-                warehouses_list.pop()
-                self.warehouse_selection[chat_id] = set(warehouses_list)
-                # Обновляем страницу с текущим списком складов
-                await self.show_warehouse_selection(update, context, 0)
+            try:
+                if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
+                    # Преобразуем множество в список, удаляем последний элемент и создаем новое множество
+                    warehouses_list = list(self.warehouse_selection[chat_id])
+                    removed_warehouse = warehouses_list.pop()
+                    self.warehouse_selection[chat_id] = set(warehouses_list)
+                    
+                    # Получаем список всех складов для отображения названия удаленного склада
+                    warehouses = await self.get_warehouse_list(context, chat_id)
+                    removed_name = warehouses.get(removed_warehouse, 'Неизвестный склад')
+                    
+                    # Обновляем страницу с текущим списком складов
+                    await self.show_warehouse_selection(update, context, 0)
+                    
+                    # Отправляем уведомление об удалении
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"🗑 Удален склад: {removed_name}"
+                    )
+            except Exception as e:
+                logger.critical(f"CRITICAL: Ошибка при удалении последнего склада: {str(e)}", exc_info=True)
+                await query.message.edit_text("❌ Произошла ошибка при удалении склада")
             
         elif query.data == "finish_warehouse_selection":
             if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
