@@ -263,40 +263,28 @@ class WBStockBot:
                     excluded_str = str(CONFIG['EX_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
                     excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
                 
-                filter_logger.info("="*50)
-                filter_logger.info("Начало обработки данных")
-                filter_logger.info(f"Target warehouses: {target_warehouses}")
-                filter_logger.info(f"Excluded warehouses: {excluded_warehouses}")
-                
                 # Фильтруем и группируем данные
                 filtered_data = {}
-                total_processed = 0
-                excluded_count = 0
+                excluded_names = set()  # Множество для хранения названий исключенных складов
                 
                 for item in response:
-                    total_processed += 1
                     # Получаем ID склада и преобразуем его в число
                     warehouse_id = None
                     try:
-                        # Проверяем все возможные варианты ключа
                         warehouse_id = item.get('warehouseID')
                         if warehouse_id is None:
-                            filter_logger.warning(f"warehouseID не найден в записи: {json.dumps(item, ensure_ascii=False)}")
                             continue
                             
                         warehouse_id = int(warehouse_id)
                         warehouse_name = item.get('warehouseName', 'N/A')
-                        filter_logger.info(f"Обработка склада: ID={warehouse_id}, Name={warehouse_name}")
                         
                         # Пропускаем склады из списка исключений
                         if excluded_warehouses and warehouse_id in excluded_warehouses:
-                            filter_logger.info(f"СКЛАД ИСКЛЮЧЕН: ID={warehouse_id}, Name={warehouse_name}")
-                            excluded_count += 1
+                            excluded_names.add(warehouse_name)
                             continue
                         
                         # Если указаны целевые склады, пропускаем все остальные
                         if target_warehouses and warehouse_id not in target_warehouses:
-                            filter_logger.info(f"СКЛАД НЕ В ЦЕЛЕВЫХ: ID={warehouse_id}, Name={warehouse_name}")
                             continue
                         
                         # Проверяем остальные условия фильтрации
@@ -323,21 +311,9 @@ class WBStockBot:
                                 'date': formatted_date,
                                 'coefficient': coefficient
                             })
-                            filter_logger.info(f"Данные добавлены для склада: ID={warehouse_id}, Name={warehouse_name}")
-                        else:
-                            filter_logger.info(f"Склад не прошел фильтрацию по условиям: ID={warehouse_id}, Name={warehouse_name}")
                             
-                    except (ValueError, TypeError) as e:
-                        filter_logger.error(f"Ошибка обработки записи: {e}")
-                        filter_logger.error(f"Данные записи: {json.dumps(item, ensure_ascii=False)}")
+                    except (ValueError, TypeError):
                         continue
-                
-                filter_logger.info("="*50)
-                filter_logger.info(f"Итоги обработки:")
-                filter_logger.info(f"Всего обработано записей: {total_processed}")
-                filter_logger.info(f"Исключено складов: {excluded_count}")
-                filter_logger.info(f"Осталось складов после фильтрации: {len(filtered_data)}")
-                filter_logger.info("="*50)
                 
                 # Сортируем данные по дате для каждого склада
                 for warehouse in filtered_data:
@@ -351,7 +327,7 @@ class WBStockBot:
                 if target_warehouses:
                     current_message += f"*Целевые склады:* {', '.join(map(str, target_warehouses))}\n"
                 if excluded_warehouses:
-                    current_message += f"*Исключенные склады:* {', '.join(map(str, excluded_warehouses))}\n"
+                    current_message += f"*Исключенные склады:* {', '.join(sorted(excluded_names))}\n"
                 current_message += "\n"
                 
                 for warehouse_name, dates in filtered_data.items():
