@@ -537,7 +537,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         user_id = update.effective_user.id
         
-        if query.data == 'start_bot':
+        if query.data == 'check_coefficients':
+            keyboard = [
+                [InlineKeyboardButton("Все склады", callback_data='check_all_coefficients')],
+                [InlineKeyboardButton("Запустить авто лимиты", callback_data='start_auto_coefficients')],
+                [InlineKeyboardButton("Остановить авто лимиты", callback_data='stop_auto_coefficients')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.message.edit_text("Выберите действие:", reply_markup=reply_markup)
+            return
+            
+        elif query.data == 'check_all_coefficients':
+            class FakeContext:
+                def __init__(self, chat_id, bot):
+                    self._chat_id = chat_id
+                    self.bot = bot
+            fake_context = FakeContext(update.effective_chat.id, context.bot)
+            await bot.get_warehouse_coefficients(fake_context)
+            
+        elif query.data == 'start_auto_coefficients':
+            if not CONFIG['TARGET_WAREHOUSE_ID']:
+                await bot.show_warehouse_selection(update, context)
+            else:
+                await bot.start_auto_coefficients(update.effective_chat.id)
+                await query.message.edit_text(
+                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
+                )
+                
+        elif query.data == 'stop_auto_coefficients':
+            if await bot.stop_auto_coefficients(update.effective_chat.id):
+                await query.message.edit_text("🛑 Автоматические проверки остановлены")
+            else:
+                await query.message.edit_text("ℹ️ Нет активных автоматических проверок")
+                
+        elif query.data == 'start_bot':
             if not bot.user_data.is_user_exists(user_id):
                 keyboard = [
                     [InlineKeyboardButton("➕ Новый пользователь", callback_data='new_user')]
@@ -567,7 +600,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
             
-        if query.data == 'new_user':
+        elif query.data == 'new_user':
             await query.message.edit_text(
                 "🔑 Пожалуйста, введите ваш токен WB:"
             )
@@ -601,39 +634,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("🛑 Автоматические проверки остановлены")
             else:
                 await query.message.reply_text("ℹ️ Нет активных автоматических проверок")
-                
-        elif query.data == 'check_coefficients':
-            keyboard = [
-                [InlineKeyboardButton("Все склады", callback_data='check_all_coefficients')],
-                [InlineKeyboardButton("Запустить авто лимиты", callback_data='start_auto_coefficients')],
-                [InlineKeyboardButton("Остановить авто лимиты", callback_data='stop_auto_coefficients')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.message.edit_text("Выберите действие:", reply_markup=reply_markup)
-            return
-            
-        elif query.data == 'check_all_coefficients':
-            class FakeContext:
-                def __init__(self, chat_id, bot):
-                    self._chat_id = chat_id
-                    self.bot = bot
-            fake_context = FakeContext(update.effective_chat.id, context.bot)
-            await bot.get_warehouse_coefficients(fake_context)
-            
-        elif query.data == 'start_auto_coefficients':
-            if not CONFIG['TARGET_WAREHOUSE_ID']:
-                await bot.show_warehouse_selection(update, context)
-            else:
-                await bot.start_auto_coefficients(update.effective_chat.id)
-                await query.message.edit_text(
-                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
-                )
-                
-        elif query.data == 'stop_auto_coefficients':
-            if await bot.stop_auto_coefficients(update.effective_chat.id):
-                await query.message.edit_text("🛑 Автоматические проверки остановлены")
-            else:
-                await query.message.edit_text("ℹ️ Нет активных автоматических проверок")
                 
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
