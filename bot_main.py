@@ -620,18 +620,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await query.message.edit_text("❌ Не выбрано ни одного склада")
                 # Возвращаемся в главное меню
-                keyboard = [
-                    [
-                        InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
-                        InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto_stock')
-                    ],
-                    [
-                        InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto_stock'),
-                        InlineKeyboardButton("📊 Доступность", callback_data='check_coefficients')
-                    ]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await query.message.reply_text("Выберите действие:", reply_markup=reply_markup)
+                await start(update, context)
                 
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
