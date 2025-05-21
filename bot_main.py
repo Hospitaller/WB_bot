@@ -93,9 +93,9 @@ class WBStockBot:
         if highlight_low:
             return low_stock_items
         return result
-
+    
+    #Основная функция получения данных
     async def fetch_wb_data(self, context: ContextTypes.DEFAULT_TYPE):
-        """Основная функция получения данных"""
         chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
         
         if not self.is_working_time():
@@ -153,8 +153,8 @@ class WBStockBot:
             logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
             await context.bot.send_message(chat_id=chat_id, text=f"❌ Произошла критическая ошибка: {str(e)}")
 
+    #Выполняет API запрос с повторными попытками
     async def make_api_request(self, session, url, headers, context, chat_id, max_retries=3, timeout=30):
-        """Выполняет API запрос с повторными попытками"""
         for attempt in range(max_retries):
             try:
                 async with session.get(url, headers=headers, timeout=timeout) as response:
@@ -188,8 +188,8 @@ class WBStockBot:
                 )
                 return None
 
+    #Запускает периодические проверки для указанного чата
     async def start_periodic_checks(self, chat_id: int):
-        """Запускает периодические проверки для указанного чата"""
         try:
             if chat_id in self.active_jobs:
                 self.active_jobs[chat_id].schedule_removal()
@@ -208,8 +208,8 @@ class WBStockBot:
             logger.critical(f"CRITICAL: Ошибка запуска периодических проверок: {str(e)}", exc_info=True)
             raise
 
+    #Останавливает периодические проверки для указанного чата
     async def stop_periodic_checks(self, chat_id: int):
-        """Останавливает периодические проверки для указанного чата"""
         try:
             if chat_id in self.active_jobs:
                 self.active_jobs[chat_id].schedule_removal()
@@ -221,8 +221,8 @@ class WBStockBot:
             logger.critical(f"CRITICAL: Ошибка остановки периодических проверок: {str(e)}", exc_info=True)
             raise
 
+    #Получение коэффициентов складов
     async def get_warehouse_coefficients(self, context: ContextTypes.DEFAULT_TYPE):
-        """Получение коэффициентов складов"""
         chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
         
         try:
@@ -502,7 +502,7 @@ def main():
     # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
     
-    # Обработчики команд с правильной передачей контекста
+    # Обработчики команд
     async def check_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
         class FakeContext:
             def __init__(self, chat_id, bot):
