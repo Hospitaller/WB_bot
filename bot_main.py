@@ -383,14 +383,18 @@ class WBStockBot:
             logger.critical(f"CRITICAL: Ошибка остановки автоматических проверок коэффициентов: {str(e)}", exc_info=True)
             raise
 
-    async def get_warehouse_list(self, context: ContextTypes.DEFAULT_TYPE):
-        chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
-        
+    async def get_warehouse_list(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int = None):
         try:
+            if chat_id is None:
+                if hasattr(context, 'job') and context.job:
+                    chat_id = context.job.chat_id
+                elif hasattr(context, '_chat_id'):
+                    chat_id = context._chat_id
+                else:
+                    return None
+
             wb_token = self.user_data.get_user_token(chat_id)
             if not wb_token:
-                if hasattr(context, 'bot'):
-                    await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден")
                 return None
 
             headers = {
@@ -419,10 +423,13 @@ class WBStockBot:
     async def show_warehouse_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE, page=0):
         try:
             chat_id = update.effective_chat.id
-            warehouses = await self.get_warehouse_list(context)
+            warehouses = await self.get_warehouse_list(context, chat_id)
             
             if not warehouses:
-                await update.message.reply_text("❌ Не удалось получить список складов")
+                if update.callback_query:
+                    await update.callback_query.message.edit_text("❌ Не удалось получить список складов")
+                else:
+                    await update.message.reply_text("❌ Не удалось получить список складов")
                 return
             
             # Сортируем склады по имени
@@ -435,7 +442,10 @@ class WBStockBot:
             available_warehouses = {k: v for k, v in sorted_warehouses.items() if k not in selected_warehouses}
             
             if not available_warehouses:
-                await update.message.reply_text("❌ Нет доступных складов для выбора")
+                if update.callback_query:
+                    await update.callback_query.message.edit_text("❌ Нет доступных складов для выбора")
+                else:
+                    await update.message.reply_text("❌ Нет доступных складов для выбора")
                 return
             
             # Разбиваем на страницы по 25 складов
@@ -467,17 +477,17 @@ class WBStockBot:
                 for warehouse_id in selected_warehouses:
                     message_text += f"- {warehouses.get(warehouse_id, 'Неизвестный склад')}\n"
             
-            if hasattr(update, 'message'):
-                await update.message.reply_text(message_text, reply_markup=reply_markup)
-            else:
+            if update.callback_query:
                 await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
+            else:
+                await update.message.reply_text(message_text, reply_markup=reply_markup)
                 
         except Exception as e:
             logger.critical(f"CRITICAL: Ошибка в show_warehouse_selection: {str(e)}", exc_info=True)
-            if hasattr(update, 'message'):
-                await update.message.reply_text("❌ Произошла ошибка при получении списка складов")
-            else:
+            if update.callback_query:
                 await update.callback_query.message.edit_text("❌ Произошла ошибка при получении списка складов")
+            else:
+                await update.message.reply_text("❌ Произошла ошибка при получении списка складов")
 
     async def handle_warehouse_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
