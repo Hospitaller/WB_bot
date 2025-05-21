@@ -15,19 +15,27 @@ from config import CONFIG
 # Загрузка переменных окружения
 load_dotenv()
 
-# Проверка наличия необходимых переменных окружения
-if not CONFIG['TG_API_KEY']:
-    raise ValueError("Не найдена необходимая переменная окружения TG_API_KEY")
+# Создаем папку для логов, если её нет
+os.makedirs('logs', exist_ok=True)
 
 # Настройка логирования
 logging.basicConfig(
-    level=logging.CRITICAL,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(CONFIG['LOG_FILE']),
+        logging.StreamHandler()
     ]
 )
 
+# Настройка логгера для фильтрации
+filter_logger = logging.getLogger('filter_logger')
+filter_logger.setLevel(logging.INFO)
+filter_handler = logging.FileHandler('logs/filter.log', encoding='utf-8')
+filter_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+filter_logger.addHandler(filter_handler)
+
+logger = logging.getLogger(__name__)
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -261,25 +269,32 @@ class WBStockBot:
                 # Фильтруем и группируем данные
                 filtered_data = {}
                 
+                # Выводим первую запись для проверки структуры
+                if response:
+                    print("Пример структуры данных:", json.dumps(response[0], indent=2, ensure_ascii=False))
+                
                 for item in response:
                     # Получаем ID склада и преобразуем его в число
                     warehouse_id = None
                     try:
-                        warehouse_id = int(item.get('warehouseId', 0))
-                    except (ValueError, TypeError):
-                        logger.warning(f"Не удалось преобразовать warehouseId в число: {item.get('warehouseId')}")
+                        # Проверяем все возможные варианты ключа
+                        warehouse_id = item.get('warehouseId') or item.get('warehouse_id') or item.get('id')
+                        if warehouse_id is not None:
+                            warehouse_id = int(warehouse_id)
+                            print(f"Найден warehouse_id: {warehouse_id} для склада {item.get('warehouseName')}")
+                    except (ValueError, TypeError) as e:
+                        print(f"Ошибка преобразования warehouse_id: {e}")
+                        print(f"Значение warehouse_id: {item.get('warehouseId')}")
                         continue
-                    
-                    logger.info(f"Processing warehouse ID: {warehouse_id}")
                     
                     # Пропускаем склады из списка исключений
                     if excluded_warehouses and warehouse_id in excluded_warehouses:
-                        logger.info(f"Пропускаем склад {warehouse_id} (в списке исключений)")
+                        print(f"Пропускаем склад {warehouse_id} (в списке исключений)")
                         continue
                     
                     # Если указаны целевые склады, пропускаем все остальные
                     if target_warehouses and warehouse_id not in target_warehouses:
-                        logger.info(f"Пропускаем склад {warehouse_id} (не в списке целевых)")
+                        print(f"Пропускаем склад {warehouse_id} (не в списке целевых)")
                         continue
                     
                     # Проверяем остальные условия фильтрации
