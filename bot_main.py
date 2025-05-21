@@ -245,11 +245,15 @@ class WBStockBot:
                 # Подготовка списков ID складов
                 target_warehouses = []
                 if CONFIG['TARGET_WAREHOUSE_ID']:
-                    target_warehouses = [int(id.strip()) for id in str(CONFIG['TARGET_WAREHOUSE_ID']).split(',') if id.strip()]
+                    # Очищаем строку от квадратных скобок и кавычек
+                    target_str = str(CONFIG['TARGET_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
+                    target_warehouses = [int(id.strip()) for id in target_str.split(',') if id.strip()]
                 
                 excluded_warehouses = []
                 if CONFIG['EX_WAREHOUSE_ID']:
-                    excluded_warehouses = [int(id.strip()) for id in str(CONFIG['EX_WAREHOUSE_ID']).split(',') if id.strip()]
+                    # Очищаем строку от квадратных скобок и кавычек
+                    excluded_str = str(CONFIG['EX_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
+                    excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
                 
                 # Фильтруем и группируем данные
                 filtered_data = {}
