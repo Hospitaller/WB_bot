@@ -451,10 +451,41 @@ def main():
     
     # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("check_stock", lambda update, context: bot.fetch_wb_data(context)))
-    application.add_handler(CommandHandler("start_auto_stock", lambda update, context: bot.start_periodic_checks(update.effective_chat.id)))
-    application.add_handler(CommandHandler("stop_auto_stock", lambda update, context: bot.stop_periodic_checks(update.effective_chat.id)))
-    application.add_handler(CommandHandler("check_coefficients", lambda update, context: bot.get_warehouse_coefficients(context)))
+    
+    # Обработчики команд с правильной передачей контекста
+    async def check_stock_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        class FakeContext:
+            def __init__(self, chat_id, bot):
+                self._chat_id = chat_id
+                self.bot = bot
+        fake_context = FakeContext(update.effective_chat.id, context.bot)
+        await bot.fetch_wb_data(fake_context)
+    
+    async def start_auto_stock_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await bot.start_periodic_checks(update.effective_chat.id)
+        await update.message.reply_text(
+            f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_INTERVAL']} минут в рабочее время)"
+        )
+    
+    async def stop_auto_stock_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if await bot.stop_periodic_checks(update.effective_chat.id):
+            await update.message.reply_text("🛑 Автоматические проверки остановлены")
+        else:
+            await update.message.reply_text("ℹ️ Нет активных автоматических проверок")
+    
+    async def check_coefficients_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        class FakeContext:
+            def __init__(self, chat_id, bot):
+                self._chat_id = chat_id
+                self.bot = bot
+        fake_context = FakeContext(update.effective_chat.id, context.bot)
+        await bot.get_warehouse_coefficients(fake_context)
+    
+    # Регистрация обработчиков команд
+    application.add_handler(CommandHandler("check_stock", check_stock_command))
+    application.add_handler(CommandHandler("start_auto_stock", start_auto_stock_command))
+    application.add_handler(CommandHandler("stop_auto_stock", stop_auto_stock_command))
+    application.add_handler(CommandHandler("check_coefficients", check_coefficients_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     # Обработчик сигналов завершения
