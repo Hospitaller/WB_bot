@@ -247,9 +247,6 @@ class WBStockBot:
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить данные о коэффициентах")
                     return
                 
-                # Добавляем задержку в 30 секунд
-                await asyncio.sleep(30)
-                
                 # Подготовка списков ID складов
                 target_warehouses = []
                 if CONFIG['TARGET_WAREHOUSE_ID']:
@@ -265,7 +262,7 @@ class WBStockBot:
                 
                 # Фильтруем и группируем данные
                 filtered_data = {}
-                excluded_names = set()  # Множество для хранения названий исключенных складов
+                excluded_names = set()
                 
                 for item in response:
                     # Получаем ID склада и преобразуем его в число
@@ -330,23 +327,26 @@ class WBStockBot:
                     current_message += f"*Исключенные склады:* {', '.join(sorted(excluded_names))}\n"
                 current_message += "\n"
                 
+                # Формируем все сообщения заранее
+                messages = []
                 for warehouse_name, dates in filtered_data.items():
-                    # Формируем строку с датами для текущего склада
                     new_line = f"*{warehouse_name}*:\n"
                     for item in dates:
                         new_line += f"--- {item['date']} = {item['coefficient']}\n"
                     new_line += "\n"
                     
-                    # Если добавление новой строки превысит лимит, отправляем текущее сообщение
                     if len(current_message) + len(new_line) > MAX_MESSAGE_LENGTH:
-                        await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode='Markdown')
+                        messages.append(current_message)
                         current_message = new_line
                     else:
                         current_message += new_line
                 
-                # Отправляем оставшуюся часть сообщения, если она есть
                 if current_message:
-                    await context.bot.send_message(chat_id=chat_id, text=current_message, parse_mode='Markdown')
+                    messages.append(current_message)
+                
+                # Отправляем все сообщения
+                for message in messages:
+                    await context.bot.send_message(chat_id=chat_id, text=message, parse_mode='Markdown')
                 
         except Exception as e:
             logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
