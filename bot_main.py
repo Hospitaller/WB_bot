@@ -638,6 +638,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             page = int(query.data.split('_')[-1])
             await bot.show_warehouse_selection(update, context, page)
             
+        elif query.data == 'remove_last_warehouse':
+            try:
+                chat_id = update.effective_chat.id
+                if chat_id in bot.warehouse_selection and bot.warehouse_selection[chat_id]:
+                    # Преобразуем множество в список, удаляем последний элемент и создаем новое множество
+                    warehouses_list = list(bot.warehouse_selection[chat_id])
+                    removed_warehouse = warehouses_list.pop()
+                    bot.warehouse_selection[chat_id] = set(warehouses_list)
+                    
+                    # Получаем список всех складов для отображения названия удаленного склада
+                    warehouses = await bot.get_warehouse_list(context, chat_id)
+                    removed_name = warehouses.get(removed_warehouse, 'Неизвестный склад')
+                    
+                    # Обновляем страницу с текущим списком складов
+                    await bot.show_warehouse_selection(update, context, 0)
+                    
+                    # Отправляем уведомление об удалении
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"🗑 Удален склад: {removed_name}"
+                    )
+            except Exception as e:
+                logger.critical(f"CRITICAL: Ошибка при удалении последнего склада: {str(e)}", exc_info=True)
+                await query.message.edit_text("❌ Произошла ошибка при удалении склада")
+            
         elif query.data == 'finish_warehouse_selection':
             chat_id = update.effective_chat.id
             if chat_id in bot.warehouse_selection and bot.warehouse_selection[chat_id]:
@@ -647,7 +672,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await query.message.edit_text("❌ Не выбрано ни одного склада")
-                # Возвращаемся в главное меню
+                # Вызываем команду /start
                 await start(update, context)
                 
     except Exception as e:
