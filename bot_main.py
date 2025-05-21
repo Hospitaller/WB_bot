@@ -699,12 +699,21 @@ def main():
             await update.message.reply_text("ℹ️ Нет активных автоматических проверок")
     
     async def check_coefficients(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        class FakeContext:
-            def __init__(self, chat_id, bot):
-                self._chat_id = chat_id
-                self.bot = bot
-        fake_context = FakeContext(update.effective_chat.id, context.bot)
-        await bot.get_warehouse_coefficients(fake_context)
+        try:
+            bot = context.bot_data.get('wb_bot')
+            if not bot:
+                raise Exception("Бот не инициализирован")
+
+            keyboard = [
+                [InlineKeyboardButton("Все склады", callback_data='check_all_coefficients')],
+                [InlineKeyboardButton("Запустить авто лимиты", callback_data='start_auto_coefficients')],
+                [InlineKeyboardButton("Остановить авто лимиты", callback_data='stop_auto_coefficients')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("Выберите действие:", reply_markup=reply_markup)
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в check_coefficients: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ Произошла критическая ошибка")
     
     # Регистрация обработчиков команд
     application.add_handler(CommandHandler("check_stock", check_stock))
