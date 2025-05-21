@@ -279,9 +279,9 @@ class WBStockBot:
                     warehouse_id = None
                     try:
                         # Проверяем все возможные варианты ключа
-                        warehouse_id = item.get('warehouseId')
+                        warehouse_id = item.get('warehouseID')
                         if warehouse_id is None:
-                            filter_logger.warning(f"warehouseId не найден в записи: {json.dumps(item, ensure_ascii=False)}")
+                            filter_logger.warning(f"warehouseID не найден в записи: {json.dumps(item, ensure_ascii=False)}")
                             continue
                             
                         warehouse_id = int(warehouse_id)
