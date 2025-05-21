@@ -242,11 +242,30 @@ class WBStockBot:
                 # Добавляем задержку в 30 секунд
                 await asyncio.sleep(30)
                 
+                # Подготовка списков ID складов
+                target_warehouses = []
+                if CONFIG['TARGET_WAREHOUSE_ID']:
+                    target_warehouses = [int(id.strip()) for id in str(CONFIG['TARGET_WAREHOUSE_ID']).split(',') if id.strip()]
+                
+                excluded_warehouses = []
+                if CONFIG['EX_WAREHOUSE_ID']:
+                    excluded_warehouses = [int(id.strip()) for id in str(CONFIG['EX_WAREHOUSE_ID']).split(',') if id.strip()]
+                
                 # Фильтруем и группируем данные
                 filtered_data = {}
                 
                 for item in response:
-                    # Проверяем условия фильтрации
+                    warehouse_id = item.get('warehouseId')
+                    
+                    # Пропускаем склады из списка исключений
+                    if excluded_warehouses and warehouse_id in excluded_warehouses:
+                        continue
+                    
+                    # Если указаны целевые склады, пропускаем все остальные
+                    if target_warehouses and warehouse_id not in target_warehouses:
+                        continue
+                    
+                    # Проверяем остальные условия фильтрации
                     if (item.get('boxTypeName') == "Короба" and 
                         item.get('coefficient') >= CONFIG['MIN_COEFFICIENT'] and 
                         item.get('coefficient') <= CONFIG['MAX_COEFFICIENT']):
@@ -279,6 +298,13 @@ class WBStockBot:
                 # Формируем сообщение
                 MAX_MESSAGE_LENGTH = 4000
                 current_message = "📊 Коэффициенты складов (Короба):\n\n"
+                
+                # Добавляем информацию о фильтрации
+                if target_warehouses:
+                    current_message += f"*Целевые склады:* {', '.join(map(str, target_warehouses))}\n"
+                if excluded_warehouses:
+                    current_message += f"*Исключенные склады:* {', '.join(map(str, excluded_warehouses))}\n"
+                current_message += "\n"
                 
                 for warehouse_name, dates in filtered_data.items():
                     # Формируем строку с датами для текущего склада

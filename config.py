@@ -18,6 +18,8 @@ CONFIG = {
     'DELAY_BETWEEN_REQUESTS': 20,  # задержка между запросами
     'MIN_COEFFICIENT': 0,       # минимальный коэффициент склада
     'MAX_COEFFICIENT': 6,       # максимальный коэффициент склада
+    'TARGET_WAREHOUSE_ID': [],   # ID склада для автоматической проверки
+    'EX_WAREHOUSE_ID': [204939, 324108,],     # ID складов для исключения из проверки
     'LOG_FILE': 'wb_bot_critical.log'
 }
 
