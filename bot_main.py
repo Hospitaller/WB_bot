@@ -473,6 +473,10 @@ class WBStockBot:
             if nav_buttons:
                 keyboard.append(nav_buttons)
             
+            # Добавляем кнопку удаления последнего склада, если есть выбранные склады
+            if selected_warehouses:
+                keyboard.append([InlineKeyboardButton("🗑 Удалить последний", callback_data="remove_last_warehouse")])
+            
             keyboard.append([InlineKeyboardButton("✅ Завершить", callback_data="finish_warehouse_selection")])
             
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -511,6 +515,14 @@ class WBStockBot:
         elif query.data.startswith("warehouse_page_"):
             page = int(query.data.split("_")[-1])
             await self.show_warehouse_selection(update, context, page)
+            
+        elif query.data == "remove_last_warehouse":
+            if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
+                # Преобразуем множество в список, удаляем последний элемент и создаем новое множество
+                warehouses_list = list(self.warehouse_selection[chat_id])
+                warehouses_list.pop()
+                self.warehouse_selection[chat_id] = set(warehouses_list)
+                await self.show_warehouse_selection(update, context)
             
         elif query.data == "finish_warehouse_selection":
             if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
