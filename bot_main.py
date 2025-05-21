@@ -50,7 +50,9 @@ class WBStockBot:
         self.timezone = pytz.timezone('Europe/Moscow')
         self.application = application
         self.active_jobs = {}
+        self.active_coefficient_jobs = {}  # Для хранения задач проверки коэффициентов
         self.user_data = UserData()
+        self.warehouse_selection = {}  # Для хранения выбранных складов пользователями
 
     # Проверка на рабочее время
     def is_working_time(self):
@@ -352,6 +354,154 @@ class WBStockBot:
             logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
             await context.bot.send_message(chat_id=chat_id, text=f"❌ Произошла критическая ошибка: {str(e)}")
 
+    async def start_auto_coefficients(self, chat_id: int):
+        try:
+            if chat_id in self.active_coefficient_jobs:
+                self.active_coefficient_jobs[chat_id].schedule_removal()
+            
+            job = self.application.job_queue.run_repeating(
+                callback=self.get_warehouse_coefficients,
+                interval=timedelta(minutes=CONFIG['CHECK_COEFFICIENTS_INTERVAL']),
+                first=0,
+                chat_id=chat_id,
+                name=f"coefficients_{chat_id}"
+            )
+            self.active_coefficient_jobs[chat_id] = job
+            return job
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка запуска автоматических проверок коэффициентов: {str(e)}", exc_info=True)
+            raise
+
+    async def stop_auto_coefficients(self, chat_id: int):
+        try:
+            if chat_id in self.active_coefficient_jobs:
+                self.active_coefficient_jobs[chat_id].schedule_removal()
+                del self.active_coefficient_jobs[chat_id]
+                return True
+            return False
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка остановки автоматических проверок коэффициентов: {str(e)}", exc_info=True)
+            raise
+
+    async def get_warehouse_list(self, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
+        
+        try:
+            wb_token = self.user_data.get_user_token(chat_id)
+            if not wb_token:
+                await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден")
+                return None
+
+            headers = {
+                'Accept': 'application/json',
+                'Authorization': wb_token
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                response = await self.make_api_request(session, CONFIG['API_URLS']['coefficients'], headers, context, chat_id)
+                
+                if not response or not isinstance(response, list):
+                    return None
+                
+                warehouses = {}
+                for item in response:
+                    warehouse_id = item.get('warehouseID')
+                    warehouse_name = item.get('warehouseName')
+                    if warehouse_id and warehouse_name:
+                        warehouses[warehouse_id] = warehouse_name
+                
+                return warehouses
+        except Exception as e:
+            logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
+            return None
+
+    async def show_warehouse_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE, page=0):
+        chat_id = update.effective_chat.id
+        warehouses = await self.get_warehouse_list(context)
+        
+        if not warehouses:
+            await update.message.reply_text("❌ Не удалось получить список складов")
+            return
+        
+        # Сортируем склады по имени
+        sorted_warehouses = dict(sorted(warehouses.items(), key=lambda x: x[1]))
+        
+        # Получаем уже выбранные склады
+        selected_warehouses = self.warehouse_selection.get(chat_id, set())
+        
+        # Фильтруем уже выбранные склады
+        available_warehouses = {k: v for k, v in sorted_warehouses.items() if k not in selected_warehouses}
+        
+        # Разбиваем на страницы по 25 складов
+        warehouse_items = list(available_warehouses.items())
+        total_pages = (len(warehouse_items) + 24) // 25
+        start_idx = page * 25
+        end_idx = min(start_idx + 25, len(warehouse_items))
+        
+        keyboard = []
+        for warehouse_id, warehouse_name in warehouse_items[start_idx:end_idx]:
+            keyboard.append([InlineKeyboardButton(f"-- {warehouse_name} --", callback_data=f"select_warehouse_{warehouse_id}")])
+        
+        # Добавляем навигационные кнопки
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"warehouse_page_{page-1}"))
+        if page < total_pages - 1:
+            nav_buttons.append(InlineKeyboardButton("Далее ▶️", callback_data=f"warehouse_page_{page+1}"))
+        if nav_buttons:
+            keyboard.append(nav_buttons)
+        
+        keyboard.append([InlineKeyboardButton("✅ Завершить", callback_data="finish_warehouse_selection")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        message_text = "Выберите склады для мониторинга коэффициентов:\n"
+        if selected_warehouses:
+            message_text += "\nВыбранные склады:\n"
+            for warehouse_id in selected_warehouses:
+                message_text += f"- {warehouses.get(warehouse_id, 'Неизвестный склад')}\n"
+        
+        await update.message.reply_text(message_text, reply_markup=reply_markup)
+
+    async def handle_warehouse_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        
+        chat_id = update.effective_chat.id
+        
+        if query.data.startswith("select_warehouse_"):
+            warehouse_id = int(query.data.split("_")[-1])
+            if chat_id not in self.warehouse_selection:
+                self.warehouse_selection[chat_id] = set()
+            self.warehouse_selection[chat_id].add(warehouse_id)
+            await self.show_warehouse_selection(update, context)
+            
+        elif query.data.startswith("warehouse_page_"):
+            page = int(query.data.split("_")[-1])
+            await self.show_warehouse_selection(update, context, page)
+            
+        elif query.data == "finish_warehouse_selection":
+            if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
+                await self.start_auto_coefficients(chat_id)
+                await query.message.edit_text(
+                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
+                )
+            else:
+                await query.message.edit_text("❌ Не выбрано ни одного склада")
+                # Возвращаемся в главное меню
+                keyboard = [
+                    [
+                        InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
+                        InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto_stock')
+                    ],
+                    [
+                        InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto_stock'),
+                        InlineKeyboardButton("📊 Доступность", callback_data='check_coefficients')
+                    ]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.message.reply_text("Выберите действие:", reply_markup=reply_markup)
+
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -453,12 +603,37 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.reply_text("ℹ️ Нет активных автоматических проверок")
                 
         elif query.data == 'check_coefficients':
+            keyboard = [
+                [InlineKeyboardButton("Все склады", callback_data='check_all_coefficients')],
+                [InlineKeyboardButton("Запустить авто лимиты", callback_data='start_auto_coefficients')],
+                [InlineKeyboardButton("Остановить авто лимиты", callback_data='stop_auto_coefficients')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.message.edit_text("Выберите действие:", reply_markup=reply_markup)
+            return
+            
+        elif query.data == 'check_all_coefficients':
             class FakeContext:
                 def __init__(self, chat_id, bot):
                     self._chat_id = chat_id
                     self.bot = bot
             fake_context = FakeContext(update.effective_chat.id, context.bot)
             await bot.get_warehouse_coefficients(fake_context)
+            
+        elif query.data == 'start_auto_coefficients':
+            if not CONFIG['TARGET_WAREHOUSE_ID']:
+                await bot.show_warehouse_selection(update, context)
+            else:
+                await bot.start_auto_coefficients(update.effective_chat.id)
+                await query.message.edit_text(
+                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут в рабочее время)"
+                )
+                
+        elif query.data == 'stop_auto_coefficients':
+            if await bot.stop_auto_coefficients(update.effective_chat.id):
+                await query.message.edit_text("🛑 Автоматические проверки остановлены")
+            else:
+                await query.message.edit_text("ℹ️ Нет активных автоматических проверок")
                 
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
@@ -536,6 +711,11 @@ def main():
     application.add_handler(CommandHandler("start_auto_stock", start_auto_stock))
     application.add_handler(CommandHandler("stop_auto_stock", stop_auto_stock))
     application.add_handler(CommandHandler("check_coefficients", check_coefficients))
+    
+    # Регистрация обработчиков callback-запросов
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(CallbackQueryHandler(bot.handle_warehouse_selection, pattern="^(select_warehouse_|warehouse_page_|finish_warehouse_selection)"))
+    
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     # Обработчик сигналов завершения
