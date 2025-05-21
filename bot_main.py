@@ -311,31 +311,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         user_id = update.effective_user.id
         if not bot.user_data.is_user_exists(user_id):
-            keyboard = [
-                [InlineKeyboardButton("➕ Новый пользователь", callback_data='new_user')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
                 "👋 Привет! Я бот для работы с Wildberries.\n"
                 "Для начала работы необходимо добавить ваш WB токен:\n"
-                "Статистика, Аналитика, Поставки",
-                reply_markup=reply_markup
+                "Статистика, Аналитика, Поставки\n\n"
+                "Введите ваш токен:"
             )
+            context.user_data['waiting_for_token'] = True
         else:
-            keyboard = [
-                [
-                    InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
-                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto_stock')
-                ],
-                [
-                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto_stock'),
-                    InlineKeyboardButton("📊 Доступность", callback_data='check_coefficients')
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                "Выберите действие:",
-                reply_markup=reply_markup
+                "Для управления ботом используйте главное меню"
             )
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в start: {str(e)}", exc_info=True)
@@ -443,26 +428,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             bot.user_data.add_user(user_id, token)
             context.user_data['waiting_for_token'] = False
             
-            keyboard = [
-                [
-                    InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
-                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto_stock')
-                ],
-                [
-                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto_stock'),
-                    InlineKeyboardButton("📊 Доступность", callback_data='check_coefficients')
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
             await update.message.reply_text(
                 "✅ Токен успешно добавлен!\n"
-                "Теперь вы можете использовать бота. Удачи!",
-                reply_markup=reply_markup
+                "Теперь вы можете использовать бота. Удачи!\n\n"
+                "Для управления ботом используйте главное меню"
             )
         else:
             await update.message.reply_text(
-                "Используйте команду /start для начала работы с ботом"
+                "Для управления ботом используйте главное меню"
             )
             
     except Exception as e:
@@ -478,8 +451,10 @@ def main():
     
     # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("check_stock", lambda update, context: bot.fetch_wb_data(context)))
+    application.add_handler(CommandHandler("start_auto_stock", lambda update, context: bot.start_periodic_checks(update.effective_chat.id)))
+    application.add_handler(CommandHandler("stop_auto_stock", lambda update, context: bot.stop_periodic_checks(update.effective_chat.id)))
     application.add_handler(CommandHandler("check_coefficients", lambda update, context: bot.get_warehouse_coefficients(context)))
-    application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     # Обработчик сигналов завершения
