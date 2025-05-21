@@ -53,6 +53,7 @@ class WBStockBot:
         self.active_coefficient_jobs = {}  # Для хранения задач проверки коэффициентов
         self.user_data = UserData()
         self.warehouse_selection = {}  # Для хранения выбранных складов пользователями
+        self.warehouse_selection_order = {}  # Для хранения порядка добавления складов
 
     # Проверка на рабочее время
     def is_working_time(self):
@@ -484,8 +485,11 @@ class WBStockBot:
             message_text = "Выберите склады для мониторинга коэффициентов:\n"
             if selected_warehouses:
                 message_text += "\nВыбранные склады:\n"
-                for warehouse_id in selected_warehouses:
-                    message_text += f"- {warehouses.get(warehouse_id, 'Неизвестный склад')}\n"
+                # Используем порядок добавления для отображения
+                if chat_id in self.warehouse_selection_order:
+                    for warehouse_id in self.warehouse_selection_order[chat_id]:
+                        if warehouse_id in selected_warehouses:
+                            message_text += f"- {warehouses.get(warehouse_id, 'Неизвестный склад')}\n"
             
             if update.callback_query:
                 await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
@@ -630,8 +634,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             if chat_id not in bot.warehouse_selection:
                 bot.warehouse_selection[chat_id] = set()
+            if chat_id not in bot.warehouse_selection_order:
+                bot.warehouse_selection_order[chat_id] = []
             
             bot.warehouse_selection[chat_id].add(warehouse_id)
+            bot.warehouse_selection_order[chat_id].append(warehouse_id)
             await bot.show_warehouse_selection(update, context)
             
         elif query.data.startswith('warehouse_page_'):
@@ -642,23 +649,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 chat_id = update.effective_chat.id
                 if chat_id in bot.warehouse_selection and bot.warehouse_selection[chat_id]:
-                    # Преобразуем множество в список, удаляем последний элемент и создаем новое множество
-                    warehouses_list = list(bot.warehouse_selection[chat_id])
-                    removed_warehouse = warehouses_list.pop()
-                    bot.warehouse_selection[chat_id] = set(warehouses_list)
-                    
                     # Получаем список всех складов для отображения названия удаленного склада
                     warehouses = await bot.get_warehouse_list(context, chat_id)
-                    removed_name = warehouses.get(removed_warehouse, 'Неизвестный склад')
+                    if not warehouses:
+                        raise Exception("Не удалось получить список складов")
                     
-                    # Обновляем страницу с текущим списком складов
-                    await bot.show_warehouse_selection(update, context, 0)
-                    
-                    # Отправляем уведомление об удалении
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=f"🗑 Удален склад: {removed_name}"
-                    )
+                    # Удаляем последний добавленный склад
+                    if chat_id in bot.warehouse_selection_order and bot.warehouse_selection_order[chat_id]:
+                        removed_warehouse = bot.warehouse_selection_order[chat_id].pop()
+                        bot.warehouse_selection[chat_id].remove(removed_warehouse)
+                        
+                        removed_name = warehouses.get(removed_warehouse, 'Неизвестный склад')
+                        
+                        # Обновляем страницу с текущим списком складов
+                        await bot.show_warehouse_selection(update, context, 0)
+                        
+                        # Отправляем уведомление об удалении
+                        await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=f"🗑 Удален склад: {removed_name}"
+                        )
             except Exception as e:
                 logger.critical(f"CRITICAL: Ошибка при удалении последнего склада: {str(e)}", exc_info=True)
                 await query.message.edit_text("❌ Произошла ошибка при удалении склада")
