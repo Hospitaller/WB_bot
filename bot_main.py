@@ -325,11 +325,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [
                 [
                     InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
-                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
+                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto_stock')
                 ],
                 [
-                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto'),
-                    InlineKeyboardButton("📊 Доступность", callback_data='coefficients')
+                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto_stock'),
+                    InlineKeyboardButton("📊 Доступность", callback_data='check_coefficients')
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -368,11 +368,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard = [
                     [
                         InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
-                        InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
+                        InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto_stock')
                     ],
                     [
-                        InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto'),
-                        InlineKeyboardButton("📊 Доступность", callback_data='coefficients')
+                        InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto_stock'),
+                        InlineKeyboardButton("📊 Доступность", callback_data='check_coefficients')
                     ]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
@@ -403,21 +403,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fake_context = FakeContext(update.effective_chat.id, context.bot)
             await bot.fetch_wb_data(fake_context)
             
-        elif query.data == 'start_auto':
+        elif query.data == 'start_auto_stock':
             chat_id = update.effective_chat.id
             await bot.start_periodic_checks(chat_id)
             await query.message.reply_text(
                 f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_INTERVAL']} минут в рабочее время)"
             )
             
-        elif query.data == 'stop_auto':
+        elif query.data == 'stop_auto_stock':
             chat_id = update.effective_chat.id
             if await bot.stop_periodic_checks(chat_id):
                 await query.message.reply_text("🛑 Автоматические проверки остановлены")
             else:
                 await query.message.reply_text("ℹ️ Нет активных автоматических проверок")
                 
-        elif query.data == 'coefficients':
+        elif query.data == 'check_coefficients':
             class FakeContext:
                 def __init__(self, chat_id, bot):
                     self._chat_id = chat_id
@@ -446,11 +446,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard = [
                 [
                     InlineKeyboardButton("🔄 Проверить остатки", callback_data='check_stock'),
-                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto')
+                    InlineKeyboardButton("✅ Запустить авто", callback_data='start_auto_stock')
                 ],
                 [
-                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto'),
-                    InlineKeyboardButton("📊 Доступность", callback_data='coefficients')
+                    InlineKeyboardButton("🛑 Остановить авто", callback_data='stop_auto_stock'),
+                    InlineKeyboardButton("📊 Доступность", callback_data='check_coefficients')
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -478,7 +478,7 @@ def main():
     
     # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("coefficients", lambda update, context: bot.get_warehouse_coefficients(context)))
+    application.add_handler(CommandHandler("check_coefficients", lambda update, context: bot.get_warehouse_coefficients(context)))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
