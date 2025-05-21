@@ -15,7 +15,7 @@ CONFIG = {
     'LOW_STOCK_THRESHOLD': 20,  # нижний порог остатков
     'WORKING_HOURS': "08-22",   # Часы работы (МСК)
     'CHECK_STOCK_INTERVAL': 120,      # Интервал проверки остатков в минутах
-    'CHECK_COEFFICIENTS_INTERVAL': 5,      # Интервал проверки коэффициентов в минутах
+    'CHECK_COEFFICIENTS_INTERVAL': 1,      # Интервал проверки коэффициентов в минутах
     'DELAY_BETWEEN_REQUESTS': 20,  # задержка между запросами
     'MIN_COEFFICIENT': 0,       # минимальный коэффициент склада
     'MAX_COEFFICIENT': 6,       # максимальный коэффициент склада

@@ -252,13 +252,15 @@ class WBStockBot:
                 # Подготовка списков ID складов
                 target_warehouses = []
                 if CONFIG['TARGET_WAREHOUSE_ID']:
-                    # Очищаем строку от квадратных скобок и кавычек
                     target_str = str(CONFIG['TARGET_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
                     target_warehouses = [int(id.strip()) for id in target_str.split(',') if id.strip()]
                 
+                # Добавляем выбранные пользователем склады
+                if chat_id in self.warehouse_selection:
+                    target_warehouses.extend(self.warehouse_selection[chat_id])
+                
                 excluded_warehouses = []
                 if CONFIG['EX_WAREHOUSE_ID']:
-                    # Очищаем строку от квадратных скобок и кавычек
                     excluded_str = str(CONFIG['EX_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
                     excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
                 
@@ -267,7 +269,6 @@ class WBStockBot:
                 excluded_names = set()
                 
                 for item in response:
-                    # Получаем ID склада и преобразуем его в число
                     warehouse_id = None
                     try:
                         warehouse_id = item.get('warehouseID')
@@ -294,9 +295,7 @@ class WBStockBot:
                             date = item.get('date', 'N/A')
                             coefficient = item.get('coefficient', 'N/A')
                             
-                            # Преобразуем дату в формат дд-мм-гг
                             try:
-                                # Убираем 'Z' и парсим ISO формат
                                 date = date.replace('Z', '')
                                 date_obj = datetime.fromisoformat(date)
                                 formatted_date = date_obj.strftime('%d-%m-%y')
