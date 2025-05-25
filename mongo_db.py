@@ -98,13 +98,19 @@ class MongoDB:
 
     def log_activity(self, user_id: int, action: str, details: dict = None):
         """Логирование активности пользователя"""
-        log_entry = {
-            'user_id': user_id,
-            'action': action,
-            'timestamp': datetime.now(),
-            'details': details or {}
-        }
-        self.logs.insert_one(log_entry)
+        try:
+            log_entry = {
+                'user_id': user_id,
+                'action': action,
+                'timestamp': datetime.now(),
+                'details': details or {}
+            }
+            logger.info(f"Logging activity: {log_entry}")
+            result = self.logs.insert_one(log_entry)
+            logger.info(f"Activity logged successfully: {result.inserted_id}")
+        except Exception as e:
+            logger.error(f"Failed to log activity: {str(e)}")
+            raise
 
     def get_user_stats(self, user_id: int):
         """Получение статистики пользователя"""
