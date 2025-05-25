@@ -578,6 +578,8 @@ class WBStockBot:
                 token = update.message.text.strip()
                 self.user_data.add_user(user_id, token)
                 self.mongo.init_user(user_id, token)
+                # Логируем добавление токена
+                self.mongo.log_activity(user_id, 'token_added')
                 context.user_data['waiting_for_token'] = False
                 
                 await update.message.reply_text(
@@ -586,6 +588,8 @@ class WBStockBot:
                     "Для управления ботом используйте главное меню"
                 )
             else:
+                # Логируем обычное сообщение
+                self.mongo.log_activity(user_id, 'message_received')
                 await update.message.reply_text(
                     "Для управления ботом используйте главное меню"
                 )
@@ -604,6 +608,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         logger.info(f"Start command received from user {user_id}")
         logger.info(f"User exists check: {bot.user_data.is_user_exists(user_id)}")
+        
+        # Логируем начало взаимодействия
+        bot.mongo.log_activity(user_id, 'start_command')
         
         if not bot.user_data.is_user_exists(user_id):
             logger.info(f"Initializing new user {user_id}")
@@ -638,6 +645,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         
         if query.data == 'check_coefficients':
+            # Логируем открытие меню коэффициентов
+            bot.mongo.log_activity(user_id, 'coefficients_menu_opened')
             keyboard = [
                 [InlineKeyboardButton("Все склады", callback_data='check_all_coefficients')],
                 [InlineKeyboardButton("Запустить авто лимиты", callback_data='start_auto_coefficients')],
@@ -648,6 +657,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         elif query.data == 'check_all_coefficients':
+            # Логируем запрос на проверку всех коэффициентов
+            bot.mongo.log_activity(user_id, 'check_all_coefficients_requested')
             # Очищаем выбранные склады перед получением данных по всем складам
             chat_id = update.effective_chat.id
             if chat_id in bot.warehouse_selection:
@@ -664,6 +675,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         elif query.data == 'start_auto_coefficients':
             try:
+                # Логируем запрос на запуск авто коэффициентов
+                bot.mongo.log_activity(user_id, 'start_auto_coefficients_requested')
                 if not CONFIG['TARGET_WAREHOUSE_ID']:
                     await bot.show_warehouse_selection(update, context)
                 else:
@@ -676,6 +689,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text("❌ Произошла ошибка при запуске автоматических проверок")
                 
         elif query.data == 'stop_auto_coefficients':
+            # Логируем запрос на остановку авто коэффициентов
+            bot.mongo.log_activity(user_id, 'stop_auto_coefficients_requested')
             if await bot.stop_auto_coefficients(update.effective_chat.id):
                 await query.message.edit_text("🛑 Автоматические проверки остановлены")
             else:
@@ -685,6 +700,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data.startswith('select_warehouse_'):
             warehouse_id = int(query.data.split('_')[-1])
             chat_id = update.effective_chat.id
+            
+            # Логируем выбор склада
+            bot.mongo.log_activity(user_id, f'warehouse_selected_{warehouse_id}')
             
             if chat_id not in bot.warehouse_selection:
                 bot.warehouse_selection[chat_id] = set()
@@ -697,12 +715,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         elif query.data.startswith('warehouse_page_'):
             page = int(query.data.split('_')[-1])
+            # Логируем переход по страницам складов
+            bot.mongo.log_activity(user_id, f'warehouse_page_{page}')
             await bot.show_warehouse_selection(update, context, page)
             
         elif query.data == 'remove_last_warehouse':
             try:
                 chat_id = update.effective_chat.id
                 if chat_id in bot.warehouse_selection and bot.warehouse_selection[chat_id]:
+                    # Логируем удаление последнего склада
+                    bot.mongo.log_activity(user_id, 'remove_last_warehouse')
+                    
                     # Получаем список всех складов для отображения названия удаленного склада
                     warehouses = await bot.get_warehouse_list(context, chat_id)
                     if not warehouses:
@@ -729,6 +752,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         elif query.data == 'finish_warehouse_selection':
             chat_id = update.effective_chat.id
+            # Логируем завершение выбора складов
+            bot.mongo.log_activity(user_id, 'finish_warehouse_selection')
+            
             if chat_id in bot.warehouse_selection and bot.warehouse_selection[chat_id]:
                 await bot.start_auto_coefficients(chat_id)
                 await query.message.edit_text(
@@ -755,30 +781,70 @@ def main():
     
     # Обработчики команд
     async def check_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        class FakeContext:
-            def __init__(self, chat_id, bot):
-                self._chat_id = chat_id
-                self.bot = bot
-        fake_context = FakeContext(update.effective_chat.id, context.bot)
-        await bot.fetch_wb_data(fake_context)
+        try:
+            bot = context.bot_data.get('wb_bot')
+            if not bot:
+                raise Exception("Бот не инициализирован")
+            
+            user_id = update.effective_user.id
+            # Логируем запрос на проверку остатков
+            bot.mongo.log_activity(user_id, 'check_stock_requested')
+            
+            class FakeContext:
+                def __init__(self, chat_id, bot):
+                    self._chat_id = chat_id
+                    self.bot = bot
+            fake_context = FakeContext(update.effective_chat.id, context.bot)
+            await bot.fetch_wb_data(fake_context)
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в check_stock: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ Произошла критическая ошибка")
     
     async def start_auto_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await bot.start_periodic_checks(update.effective_chat.id)
-        await update.message.reply_text(
-            f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_STOCK_INTERVAL']} минут(ы) в рабочее время)"
-        )
+        try:
+            bot = context.bot_data.get('wb_bot')
+            if not bot:
+                raise Exception("Бот не инициализирован")
+            
+            user_id = update.effective_user.id
+            # Логируем запуск автоматических проверок
+            bot.mongo.log_activity(user_id, 'auto_stock_started')
+            
+            await bot.start_periodic_checks(update.effective_chat.id)
+            await update.message.reply_text(
+                f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_STOCK_INTERVAL']} минут(ы) в рабочее время)"
+            )
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в start_auto_stock: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ Произошла критическая ошибка")
     
     async def stop_auto_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if await bot.stop_periodic_checks(update.effective_chat.id):
-            await update.message.reply_text("🛑 Автоматические проверки остановлены")
-        else:
-            await update.message.reply_text("ℹ️ Нет активных автоматических проверок")
+        try:
+            bot = context.bot_data.get('wb_bot')
+            if not bot:
+                raise Exception("Бот не инициализирован")
+            
+            user_id = update.effective_user.id
+            # Логируем остановку автоматических проверок
+            bot.mongo.log_activity(user_id, 'auto_stock_stopped')
+            
+            if await bot.stop_periodic_checks(update.effective_chat.id):
+                await update.message.reply_text("🛑 Автоматические проверки остановлены")
+            else:
+                await update.message.reply_text("ℹ️ Нет активных автоматических проверок")
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в stop_auto_stock: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ Произошла критическая ошибка")
     
     async def check_coefficients(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             bot = context.bot_data.get('wb_bot')
             if not bot:
                 raise Exception("Бот не инициализирован")
+            
+            user_id = update.effective_user.id
+            # Логируем запрос на проверку коэффициентов
+            bot.mongo.log_activity(user_id, 'check_coefficients_requested')
 
             keyboard = [
                 [InlineKeyboardButton("Все склады", callback_data='check_all_coefficients')],
