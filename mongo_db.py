@@ -3,37 +3,51 @@ from datetime import datetime
 import logging
 from config import CONFIG
 
+logger = logging.getLogger(__name__)
+
 class MongoDB:
     def __init__(self):
-        self.client = MongoClient(CONFIG['MONGODB_URI'])
-        self.db = self.client[CONFIG['MONGODB_DB']]
-        self.users = self.db.users
-        self.logs = self.db.logs
+        try:
+            logger.info(f"Connecting to MongoDB: {CONFIG['MONGODB_URI']}")
+            self.client = MongoClient(CONFIG['MONGODB_URI'])
+            self.db = self.client[CONFIG['MONGODB_DB']]
+            self.users = self.db.users
+            self.logs = self.db.logs
+            logger.info("Successfully connected to MongoDB")
+        except Exception as e:
+            logger.error(f"Failed to connect to MongoDB: {str(e)}")
+            raise
 
     def init_user(self, user_id: int, token: str):
         """Инициализация пользователя с настройками по умолчанию"""
-        user_data = {
-            'user_id': user_id,
-            'token': token,
-            'auto_coefficients': False,
-            'auto_stock': False,
-            'last_activity': datetime.now(),
-            'warehouse_selection': [],
-            'settings': {
-                'working_hours_start': CONFIG['WORKING_HOURS'].split('-')[0],
-                'working_hours_end': CONFIG['WORKING_HOURS'].split('-')[1],
-                'check_stock_interval': CONFIG['CHECK_STOCK_INTERVAL'],
-                'check_coefficients_interval': CONFIG['CHECK_COEFFICIENTS_INTERVAL'],
-                'low_stock_threshold': CONFIG['LOW_STOCK_THRESHOLD'],
-                'min_coefficient': CONFIG['MIN_COEFFICIENT'],
-                'max_coefficient': CONFIG['MAX_COEFFICIENT']
+        try:
+            logger.info(f"Initializing user {user_id}")
+            user_data = {
+                'user_id': user_id,
+                'token': token,
+                'auto_coefficients': False,
+                'auto_stock': False,
+                'last_activity': datetime.now(),
+                'warehouse_selection': [],
+                'settings': {
+                    'working_hours_start': CONFIG['WORKING_HOURS'].split('-')[0],
+                    'working_hours_end': CONFIG['WORKING_HOURS'].split('-')[1],
+                    'check_stock_interval': CONFIG['CHECK_STOCK_INTERVAL'],
+                    'check_coefficients_interval': CONFIG['CHECK_COEFFICIENTS_INTERVAL'],
+                    'low_stock_threshold': CONFIG['LOW_STOCK_THRESHOLD'],
+                    'min_coefficient': CONFIG['MIN_COEFFICIENT'],
+                    'max_coefficient': CONFIG['MAX_COEFFICIENT']
+                }
             }
-        }
-        self.users.update_one(
-            {'user_id': user_id},
-            {'$set': user_data},
-            upsert=True
-        )
+            result = self.users.update_one(
+                {'user_id': user_id},
+                {'$set': user_data},
+                upsert=True
+            )
+            logger.info(f"User initialization result: {result.raw_result}")
+        except Exception as e:
+            logger.error(f"Failed to initialize user {user_id}: {str(e)}")
+            raise
 
     def update_user_activity(self, user_id: int):
         """Обновление времени последней активности пользователя"""
