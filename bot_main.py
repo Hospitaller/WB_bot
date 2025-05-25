@@ -607,10 +607,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         user_id = update.effective_user.id
         logger.info(f"Start command received from user {user_id}")
-        logger.info(f"User exists check: {bot.user_data.is_user_exists(user_id)}")
         
-        # Логируем начало взаимодействия
+        # Логируем начало взаимодействия до проверки существования пользователя
         bot.mongo.log_activity(user_id, 'start_command')
+        
+        logger.info(f"User exists check: {bot.user_data.is_user_exists(user_id)}")
         
         if not bot.user_data.is_user_exists(user_id):
             logger.info(f"Initializing new user {user_id}")

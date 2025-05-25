@@ -53,6 +53,7 @@ class MongoDB:
                     'max_coefficient': CONFIG['MAX_COEFFICIENT']
                 }
             }
+            logger.info(f"User data prepared: {user_data}")
             result = self.users.update_one(
                 {'user_id': user_id},
                 {'$set': user_data},
@@ -64,6 +65,8 @@ class MongoDB:
             user = self.users.find_one({'user_id': user_id})
             if user:
                 logger.info(f"User {user_id} successfully created/updated in database")
+                # Логируем создание пользователя
+                self.log_activity(user_id, 'user_initialized', {'token_length': len(token)})
             else:
                 logger.error(f"Failed to create/update user {user_id} in database")
         except Exception as e:
