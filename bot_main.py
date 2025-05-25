@@ -504,9 +504,12 @@ class WBStockBot:
                 self.active_coefficient_jobs[chat_id].schedule_removal()
             
             settings = self.mongo.get_user_settings(chat_id)
+            # Используем значение из настроек пользователя или значение по умолчанию из CONFIG
+            interval = settings.get('check_coefficients_interval', CONFIG['CHECK_COEFFICIENTS_INTERVAL'])
+            
             job = self.application.job_queue.run_repeating(
                 callback=self.get_warehouse_coefficients,
-                interval=timedelta(minutes=settings['check_coefficients_interval']),
+                interval=timedelta(minutes=interval),
                 first=0,
                 chat_id=chat_id,
                 name=f"coefficients_{chat_id}"

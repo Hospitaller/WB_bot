@@ -120,11 +120,16 @@ class MongoDB:
                 'low_stock_threshold': CONFIG['LOW_STOCK_THRESHOLD']
             }
         }
-        self.users.update_one(
-            {'user_id': user_id},
-            {'$setOnInsert': user_data},
-            upsert=True
-        )
+        try:
+            self.users.update_one(
+                {'user_id': user_id},
+                {'$setOnInsert': user_data},
+                upsert=True
+            )
+            logger.info(f"User {user_id} initialized with default settings")
+        except Exception as e:
+            logger.error(f"Failed to initialize user {user_id}: {str(e)}")
+            raise
 
     def update_user_activity(self, user_id: int):
         """Обновление времени последней активности пользователя"""
