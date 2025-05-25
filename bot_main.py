@@ -239,6 +239,7 @@ class WBStockBot:
         try:
             # Получаем настройки
             settings = self.mongo.get_global_settings()
+            user_settings = self.mongo.get_user_settings(chat_id)
             
             # Получаем токен пользователя
             wb_token = self.user_data.get_user_token(chat_id)
@@ -280,6 +281,10 @@ class WBStockBot:
                     excluded_str = str(settings['ex_warehouse_id']).replace('[', '').replace(']', '').replace("'", '')
                     excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
                 
+                # Получаем список временно отключенных складов
+                paused_warehouses = settings.get('TARGET_WAREHOUSE_ID_PAUSE', [])
+                paused_warehouses = [int(id.strip()) for id in paused_warehouses if id.strip()]
+                
                 # Фильтруем и группируем данные
                 filtered_data = {}
                 
@@ -292,6 +297,10 @@ class WBStockBot:
                             
                         warehouse_id = int(warehouse_id)
                         warehouse_name = item.get('warehouseName', 'N/A')
+                        
+                        # Пропускаем временно отключенные склады
+                        if warehouse_id in paused_warehouses:
+                            continue
                         
                         # Собираем названия целевых складов
                         if warehouse_id in target_warehouses:
@@ -317,7 +326,7 @@ class WBStockBot:
                             try:
                                 date = date.replace('Z', '')
                                 date_obj = datetime.fromisoformat(date)
-                                formatted_date = date_obj.strftime('%d-%m-%y')
+                                formatted_date = date_obj.strftime('%d.%m.%Y')
                             except:
                                 formatted_date = date
                             
@@ -334,10 +343,10 @@ class WBStockBot:
                 
                 # Сортируем данные по дате для каждого склада
                 for warehouse in filtered_data:
-                    filtered_data[warehouse].sort(key=lambda x: datetime.strptime(x['date'], '%d-%m-%y'))
+                    filtered_data[warehouse].sort(key=lambda x: datetime.strptime(x['date'], '%d.%m.%Y'))
                 
                 # Формируем сообщение
-                MAX_MESSAGE_LENGTH = 4000
+                MAX_MESSAGE_LENGTH = 3500  # Уменьшаем лимит для надежности
                 current_message = "📊 Коэффициенты складов (Короба):\n\n"
                 
                 # Добавляем информацию о фильтрации
@@ -373,12 +382,121 @@ class WBStockBot:
                     return
                 
                 # Отправляем все сообщения
-                for message in messages:
-                    await context.bot.send_message(chat_id=chat_id, text=message, parse_mode='Markdown')
+                for i, message in enumerate(messages):
+                    try:
+                        # Добавляем кнопки только к последнему сообщению, если это автоматическая проверка
+                        if i == len(messages) - 1 and target_warehouses and hasattr(context, 'job'):
+                            keyboard = InlineKeyboardMarkup(row_width=1)
+                            keyboard.add(
+                                InlineKeyboardButton(
+                                    "🔕 Выключить до завтра",
+                                    callback_data=f"disable_warehouses:{','.join(target_names)}"
+                                ),
+                                InlineKeyboardButton(
+                                    "🛑 Выключить совсем",
+                                    callback_data="stop_auto_coefficients"
+                                )
+                            )
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=message,
+                                parse_mode='Markdown',
+                                reply_markup=keyboard
+                            )
+                        else:
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=message,
+                                parse_mode='Markdown'
+                            )
+                    except Exception as e:
+                        logger.error(f"Ошибка при отправке сообщения {i+1}/{len(messages)}: {str(e)}")
+                        # Пробуем отправить сообщение частями
+                        try:
+                            # Разбиваем сообщение на части по 3000 символов
+                            parts = [message[i:i+3000] for i in range(0, len(message), 3000)]
+                            for j, part in enumerate(parts):
+                                await context.bot.send_message(
+                                    chat_id=chat_id,
+                                    text=f"Часть {j+1} из {len(parts)}:\n{part}",
+                                    parse_mode='Markdown'
+                                )
+                        except Exception as e:
+                            logger.error(f"Не удалось отправить даже разбитое сообщение: {str(e)}")
                 
+                # Обновляем время последнего уведомления
+                self.mongo.update_user_settings(chat_id, {'last_notification': datetime.utcnow()})
+                
+                # Проверяем, нужно ли сбросить отключенные склады
+                if paused_warehouses:
+                    last_notification = user_settings.get('last_notification')
+                    if last_notification:
+                        next_day_start = datetime.combine(
+                            last_notification.date() + timedelta(days=1),
+                            datetime.strptime(settings['working_hours_start'], '%H:%M').time()
+                        )
+                        if datetime.utcnow() >= next_day_start:
+                            # Очищаем TARGET_WAREHOUSE_ID_PAUSE
+                            settings['TARGET_WAREHOUSE_ID_PAUSE'] = []
+                            self.mongo.update_global_settings(settings)
+            
         except Exception as e:
             logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
             await context.bot.send_message(chat_id=chat_id, text=f"❌ Произошла критическая ошибка: {str(e)}")
+
+    async def process_disable_warehouses(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка нажатия кнопки 'Выключить до завтра'"""
+        query = update.callback_query
+        user_id = query.from_user.id
+        warehouses = query.data.split(':')[1].split(',')
+        
+        try:
+            # Получаем настройки
+            settings = self.mongo.get_global_settings()
+            
+            # Получаем ID складов из названий
+            warehouses_data = await self.get_warehouse_list(context, user_id)
+            if not warehouses_data:
+                await query.answer("❌ Ошибка: не удалось получить список складов")
+                return
+                
+            # Находим ID складов по их названиям
+            warehouse_ids = []
+            for warehouse_name in warehouses:
+                warehouse_id = next((id for id, name in warehouses_data.items() if name == warehouse_name), None)
+                if warehouse_id:
+                    warehouse_ids.append(str(warehouse_id))
+            
+            if warehouse_ids:
+                # Добавляем ID складов в TARGET_WAREHOUSE_ID_PAUSE
+                paused_warehouses = settings.get('TARGET_WAREHOUSE_ID_PAUSE', [])
+                paused_warehouses.extend(warehouse_ids)
+                # Удаляем дубликаты
+                paused_warehouses = list(set(paused_warehouses))
+                
+                # Обновляем настройки
+                settings['TARGET_WAREHOUSE_ID_PAUSE'] = paused_warehouses
+                self.mongo.update_global_settings(settings)
+                
+                await query.answer("✅ Уведомления по выбранным складам отключены до завтра")
+            else:
+                await query.answer("❌ Ошибка: не удалось найти ID складов")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при отключении складов: {str(e)}")
+            await query.answer("❌ Произошла ошибка при отключении складов")
+
+    async def process_stop_auto_coefficients(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка нажатия кнопки 'Выключить совсем'"""
+        query = update.callback_query
+        user_id = query.from_user.id
+        
+        try:
+            await self.stop_auto_coefficients(user_id)
+            await query.answer("✅ Автоматическое отслеживание остановлено")
+        except Exception as e:
+            logger.error(f"Ошибка при остановке автоотслеживания: {str(e)}")
+            await query.answer("❌ Произошла ошибка при остановке автоотслеживания")
 
     async def start_auto_coefficients(self, chat_id: int):
         try:
@@ -775,6 +893,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text("❌ Не выбрано ни одного склада")
                 # Вызываем команду /start
                 await start(update, context)
+
+        # Обработка новых кнопок
+        elif query.data.startswith('disable_warehouses:'):
+            # Логируем отключение складов до завтра
+            bot.mongo.log_activity(user_id, 'disable_warehouses_until_tomorrow')
+            await bot.process_disable_warehouses(update, context)
+            
+        elif query.data == 'stop_auto_coefficients':
+            # Логируем полное отключение автоотслеживания
+            bot.mongo.log_activity(user_id, 'stop_auto_coefficients_completely')
+            await bot.process_stop_auto_coefficients(update, context)
                 
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
