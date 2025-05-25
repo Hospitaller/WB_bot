@@ -11,6 +11,7 @@ import signal
 from dotenv import load_dotenv
 from user_data import UserData
 from config import CONFIG
+from mongo_db import MongoDB
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -54,6 +55,7 @@ class WBStockBot:
         self.user_data = UserData()
         self.warehouse_selection = {}  # Для хранения выбранных складов пользователями
         self.warehouse_selection_order = {}  # Для хранения порядка добавления складов
+        self.mongo = MongoDB()
 
     # Проверка на рабочее время
     def is_working_time(self):
@@ -382,6 +384,8 @@ class WBStockBot:
                 name=f"coefficients_{chat_id}"
             )
             self.active_coefficient_jobs[chat_id] = job
+            self.mongo.update_auto_coefficients(chat_id, True)
+            self.mongo.log_activity(chat_id, 'start_auto_coefficients')
             return job
         except Exception as e:
             logger.critical(f"CRITICAL: Ошибка запуска автоматических проверок коэффициентов: {str(e)}", exc_info=True)
@@ -392,6 +396,8 @@ class WBStockBot:
             if chat_id in self.active_coefficient_jobs:
                 self.active_coefficient_jobs[chat_id].schedule_removal()
                 del self.active_coefficient_jobs[chat_id]
+                self.mongo.update_auto_coefficients(chat_id, False)
+                self.mongo.log_activity(chat_id, 'stop_auto_coefficients')
                 return True
             return False
         except Exception as e:
@@ -563,6 +569,31 @@ class WBStockBot:
                 # Вызываем команду /start
                 await start(update, context)
 
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            user_id = update.effective_user.id
+            self.mongo.update_user_activity(user_id)
+            
+            if context.user_data.get('waiting_for_token'):
+                token = update.message.text.strip()
+                self.user_data.add_user(user_id, token)
+                self.mongo.init_user(user_id, token)
+                context.user_data['waiting_for_token'] = False
+                
+                await update.message.reply_text(
+                    "✅ Токен успешно добавлен!\n"
+                    "Теперь вы можете использовать бота. Удачи!\n\n"
+                    "Для управления ботом используйте главное меню"
+                )
+            else:
+                await update.message.reply_text(
+                    "Для управления ботом используйте главное меню"
+                )
+                
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в обработчике сообщений: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ Произошла критическая ошибка")
+
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -704,34 +735,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
         await query.message.reply_text("❌ Произошла критическая ошибка")
 
-# Обработчик текстовых сообщений
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        bot = context.bot_data.get('wb_bot')
-        if not bot:
-            raise Exception("Бот не инициализирован")
-
-        user_id = update.effective_user.id
-        
-        if context.user_data.get('waiting_for_token'):
-            token = update.message.text.strip()
-            bot.user_data.add_user(user_id, token)
-            context.user_data['waiting_for_token'] = False
-            
-            await update.message.reply_text(
-                "✅ Токен успешно добавлен!\n"
-                "Теперь вы можете использовать бота. Удачи!\n\n"
-                "Для управления ботом используйте главное меню"
-            )
-        else:
-            await update.message.reply_text(
-                "Для управления ботом используйте главное меню"
-            )
-            
-    except Exception as e:
-        logger.critical(f"CRITICAL: Ошибка в обработчике сообщений: {str(e)}", exc_info=True)
-        await update.message.reply_text("❌ Произошла критическая ошибка")
-
 # Основная функция запуска бота
 def main():
     """Запуск бота"""
@@ -789,7 +792,7 @@ def main():
     # Регистрация обработчиков callback-запросов
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, bot.handle_message))
     
     # Обработчик сигналов завершения
     def signal_handler(signum, frame):
