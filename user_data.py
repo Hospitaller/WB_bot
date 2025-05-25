@@ -1,12 +1,14 @@
 import os
 from typing import Dict, Optional
 from dotenv import load_dotenv, set_key, unset_key
+from mongo_db import MongoDB
 
 class UserData:
     def __init__(self, env_file: str = '.env'):
         self.env_file = env_file
         load_dotenv(env_file)
         self.data: Dict[int, Dict] = self._load_data()
+        self.mongo = MongoDB()
 
     def _load_data(self) -> Dict[int, Dict]:
         data = {}
@@ -27,14 +29,17 @@ class UserData:
             'auth_token': auth_token,
             'auto_check_enabled': False
         }
+        # Сохраняем пользователя в MongoDB
+        self.mongo.init_user(user_id, auth_token)
 
     def get_user_token(self, user_id: int) -> Optional[str]:
         load_dotenv(self.env_file, override=True)
         return os.getenv(f'AUTH_TOKEN_{user_id}')
 
     def is_user_exists(self, user_id: int) -> bool:
-        load_dotenv(self.env_file, override=True)
-        return f'AUTH_TOKEN_{user_id}' in os.environ
+        # Проверяем существование пользователя в MongoDB
+        user = self.mongo.users.find_one({'user_id': user_id})
+        return user is not None
 
     def set_auto_check_status(self, user_id: int, status: bool):
         if user_id in self.data:

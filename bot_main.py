@@ -602,7 +602,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise Exception("Бот не инициализирован")
 
         user_id = update.effective_user.id
+        logger.info(f"Start command received from user {user_id}")
+        logger.info(f"User exists check: {bot.user_data.is_user_exists(user_id)}")
+        
         if not bot.user_data.is_user_exists(user_id):
+            logger.info(f"Initializing new user {user_id}")
             await update.message.reply_text(
                 "👋 Привет! Я бот для работы с Wildberries.\n"
                 "Для начала работы необходимо добавить ваш WB токен:\n"
@@ -612,7 +616,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['waiting_for_token'] = True
             # Инициализируем пользователя в MongoDB с пустым токеном
             bot.mongo.init_user(user_id, "")
+            logger.info(f"User {user_id} initialized in MongoDB")
         else:
+            logger.info(f"User {user_id} already exists")
             await update.message.reply_text(
                 "Для управления ботом используйте главное меню"
             )
