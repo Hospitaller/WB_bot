@@ -601,6 +601,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         elif query.data == 'check_all_coefficients':
+            # Очищаем выбранные склады перед получением данных по всем складам
+            chat_id = update.effective_chat.id
+            if chat_id in bot.warehouse_selection:
+                bot.warehouse_selection[chat_id] = set()
+            if chat_id in bot.warehouse_selection_order:
+                bot.warehouse_selection_order[chat_id] = []
+                
             class FakeContext:
                 def __init__(self, chat_id, bot):
                     self._chat_id = chat_id
