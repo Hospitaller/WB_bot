@@ -11,9 +11,23 @@ class MongoDB:
             logger.info(f"Connecting to MongoDB: {CONFIG['MONGODB_URI']}")
             self.client = MongoClient(CONFIG['MONGODB_URI'])
             self.db = self.client[CONFIG['MONGODB_DB']]
+            
+            # Проверяем существование коллекций
+            collections = self.db.list_collection_names()
+            logger.info(f"Existing collections: {collections}")
+            
+            # Создаем коллекции, если их нет
+            if 'users' not in collections:
+                logger.info("Creating 'users' collection")
+                self.db.create_collection('users')
+            
+            if 'logs' not in collections:
+                logger.info("Creating 'logs' collection")
+                self.db.create_collection('logs')
+            
             self.users = self.db.users
             self.logs = self.db.logs
-            logger.info("Successfully connected to MongoDB")
+            logger.info("Successfully connected to MongoDB and initialized collections")
         except Exception as e:
             logger.error(f"Failed to connect to MongoDB: {str(e)}")
             raise
@@ -21,7 +35,7 @@ class MongoDB:
     def init_user(self, user_id: int, token: str):
         """Инициализация пользователя с настройками по умолчанию"""
         try:
-            logger.info(f"Initializing user {user_id}")
+            logger.info(f"Initializing user {user_id} with token: {token[:10]}...")
             user_data = {
                 'user_id': user_id,
                 'token': token,
@@ -45,6 +59,13 @@ class MongoDB:
                 upsert=True
             )
             logger.info(f"User initialization result: {result.raw_result}")
+            
+            # Проверяем, что пользователь действительно создан
+            user = self.users.find_one({'user_id': user_id})
+            if user:
+                logger.info(f"User {user_id} successfully created/updated in database")
+            else:
+                logger.error(f"Failed to create/update user {user_id} in database")
         except Exception as e:
             logger.error(f"Failed to initialize user {user_id}: {str(e)}")
             raise
