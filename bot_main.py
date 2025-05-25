@@ -610,6 +610,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Введите ваш токен:"
             )
             context.user_data['waiting_for_token'] = True
+            # Инициализируем пользователя в MongoDB с пустым токеном
+            bot.mongo.init_user(user_id, "")
         else:
             await update.message.reply_text(
                 "Для управления ботом используйте главное меню"
