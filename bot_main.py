@@ -382,21 +382,23 @@ class WBStockBot:
                     return
                 
                 # Отправляем все сообщения
+                keyboard = None
+                if target_warehouses and hasattr(context, 'job'):
+                    keyboard = InlineKeyboardMarkup([
+                        [InlineKeyboardButton(
+                            "🔕 Выключить до завтра",
+                            callback_data=f"disable_warehouses:{','.join(target_names)}"
+                        )],
+                        [InlineKeyboardButton(
+                            "🛑 Выключить совсем",
+                            callback_data="stop_auto_coefficients"
+                        )]
+                    ])
+
                 for i, message in enumerate(messages):
                     try:
                         # Добавляем кнопки только к последнему сообщению, если это автоматическая проверка
-                        if i == len(messages) - 1 and target_warehouses and hasattr(context, 'job'):
-                            keyboard = InlineKeyboardMarkup(row_width=1)
-                            keyboard.add(
-                                InlineKeyboardButton(
-                                    "🔕 Выключить до завтра",
-                                    callback_data=f"disable_warehouses:{','.join(target_names)}"
-                                ),
-                                InlineKeyboardButton(
-                                    "🛑 Выключить совсем",
-                                    callback_data="stop_auto_coefficients"
-                                )
-                            )
+                        if i == len(messages) - 1 and keyboard:
                             await context.bot.send_message(
                                 chat_id=chat_id,
                                 text=message,
@@ -417,7 +419,7 @@ class WBStockBot:
                             parts = [message[i:i+3000] for i in range(0, len(message), 3000)]
                             for j, part in enumerate(parts):
                                 # Добавляем кнопки только к последней части последнего сообщения, если это автоматическая проверка
-                                if i == len(messages) - 1 and j == len(parts) - 1 and target_warehouses and hasattr(context, 'job'):
+                                if i == len(messages) - 1 and j == len(parts) - 1 and keyboard:
                                     await context.bot.send_message(
                                         chat_id=chat_id,
                                         text=f"Часть {j+1} из {len(parts)}:\n{part}",
