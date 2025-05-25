@@ -22,7 +22,7 @@ CONFIG = {
     'TARGET_WAREHOUSE_ID': [],   # ID склада для автоматической проверки
     'EX_WAREHOUSE_ID': ['204939', '324108', '218987'],     # ID складов для исключения из проверки
     'LOG_FILE': 'wb_bot_critical.log',
-    'MONGODB_URI': 'mongodb://wb_bot_user:ioanites18017@localhost:27017/wb_bot',
+    'MONGODB_URI': 'mongodb://wb_bot_user:ioanites18017@178.209.127.51:27017/wb_bot',
     'MONGODB_DB': 'wb_bot'
 }
 
