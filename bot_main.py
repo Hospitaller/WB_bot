@@ -416,11 +416,20 @@ class WBStockBot:
                             # Разбиваем сообщение на части по 3000 символов
                             parts = [message[i:i+3000] for i in range(0, len(message), 3000)]
                             for j, part in enumerate(parts):
-                                await context.bot.send_message(
-                                    chat_id=chat_id,
-                                    text=f"Часть {j+1} из {len(parts)}:\n{part}",
-                                    parse_mode='Markdown'
-                                )
+                                # Добавляем кнопки только к последней части последнего сообщения, если это автоматическая проверка
+                                if i == len(messages) - 1 and j == len(parts) - 1 and target_warehouses and hasattr(context, 'job'):
+                                    await context.bot.send_message(
+                                        chat_id=chat_id,
+                                        text=f"Часть {j+1} из {len(parts)}:\n{part}",
+                                        parse_mode='Markdown',
+                                        reply_markup=keyboard
+                                    )
+                                else:
+                                    await context.bot.send_message(
+                                        chat_id=chat_id,
+                                        text=f"Часть {j+1} из {len(parts)}:\n{part}",
+                                        parse_mode='Markdown'
+                                    )
                         except Exception as e:
                             logger.error(f"Не удалось отправить даже разбитое сообщение: {str(e)}")
                 
