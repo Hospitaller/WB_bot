@@ -24,13 +24,75 @@ class MongoDB:
             if 'logs' not in collections:
                 logger.info("Creating 'logs' collection")
                 self.db.create_collection('logs')
+                
+            if 'settings' not in collections:
+                logger.info("Creating 'settings' collection")
+                self.db.create_collection('settings')
+                # Инициализируем настройки по умолчанию
+                self.init_default_settings()
             
             self.users = self.db.users
             self.logs = self.db.logs
+            self.settings = self.db.settings
             logger.info("Successfully connected to MongoDB and initialized collections")
         except Exception as e:
             logger.error(f"Failed to connect to MongoDB: {str(e)}")
             raise
+
+    def init_default_settings(self):
+        """Инициализация настроек по умолчанию"""
+        try:
+            default_settings = {
+                'working_hours': CONFIG['WORKING_HOURS'],
+                'check_stock_interval': CONFIG['CHECK_STOCK_INTERVAL'],
+                'check_coefficients_interval': CONFIG['CHECK_COEFFICIENTS_INTERVAL'],
+                'low_stock_threshold': CONFIG['LOW_STOCK_THRESHOLD'],
+                'min_coefficient': CONFIG['MIN_COEFFICIENT'],
+                'max_coefficient': CONFIG['MAX_COEFFICIENT'],
+                'target_warehouse_id': CONFIG['TARGET_WAREHOUSE_ID'],
+                'ex_warehouse_id': CONFIG['EX_WAREHOUSE_ID'],
+                'api_urls': CONFIG['API_URLS'],
+                'delay_between_requests': CONFIG['DELAY_BETWEEN_REQUESTS']
+            }
+            
+            # Проверяем, есть ли уже настройки
+            if self.settings.count_documents({}) == 0:
+                self.settings.insert_one({
+                    '_id': 'global',
+                    **default_settings
+                })
+                logger.info("Default settings initialized in database")
+            else:
+                logger.info("Settings already exist in database")
+        except Exception as e:
+            logger.error(f"Failed to initialize default settings: {str(e)}")
+            raise
+
+    def get_global_settings(self):
+        """Получение глобальных настроек"""
+        try:
+            settings = self.settings.find_one({'_id': 'global'})
+            if not settings:
+                logger.warning("Global settings not found, initializing defaults")
+                self.init_default_settings()
+                settings = self.settings.find_one({'_id': 'global'})
+            return settings
+        except Exception as e:
+            logger.error(f"Failed to get global settings: {str(e)}")
+            raise
+
+    def update_global_settings(self, settings: dict):
+        """Обновление глобальных настроек"""
+        try:
+            result = self.settings.update_one(
+                {'_id': 'global'},
+                {'$set': settings}
+            )
+            logger.info(f"Global settings updated: {result.modified_count} documents modified")
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"Failed to update global settings: {str(e)}")
+            return False
 
     def init_user(self, user_id: int, token: str):
         """Инициализация пользователя с настройками по умолчанию"""
@@ -96,8 +158,28 @@ class MongoDB:
 
     def get_user_settings(self, user_id: int):
         """Получение настроек пользователя"""
-        user = self.users.find_one({'user_id': user_id})
-        return user.get('settings', {}) if user else {}
+        try:
+            user = self.users.find_one({'user_id': user_id})
+            if not user:
+                # Если пользователь не найден, возвращаем глобальные настройки
+                return self.get_global_settings()
+            return user.get('settings', self.get_global_settings())
+        except Exception as e:
+            logger.error(f"Failed to get user settings: {str(e)}")
+            return self.get_global_settings()
+
+    def update_user_settings(self, user_id: int, settings: dict):
+        """Обновление настроек пользователя"""
+        try:
+            result = self.users.update_one(
+                {'user_id': user_id},
+                {'$set': {'settings': settings}}
+            )
+            logger.info(f"Settings updated for user {user_id}: {result.modified_count} documents modified")
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"Failed to update settings for user {user_id}: {str(e)}")
+            return False
 
     def log_activity(self, user_id: int, action: str, details: dict = None):
         """Логирование активности пользователя"""

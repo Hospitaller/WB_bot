@@ -47,8 +47,6 @@ logger.addHandler(console_handler)
 # Класс бота
 class WBStockBot:
     def __init__(self, application):
-        self.working_hours_start, self.working_hours_end = map(int, CONFIG['WORKING_HOURS'].split('-'))
-        self.timezone = pytz.timezone('Europe/Moscow')
         self.application = application
         self.active_jobs = {}
         self.active_coefficient_jobs = {}  # Для хранения задач проверки коэффициентов
@@ -56,19 +54,26 @@ class WBStockBot:
         self.warehouse_selection = {}  # Для хранения выбранных складов пользователями
         self.warehouse_selection_order = {}  # Для хранения порядка добавления складов
         self.mongo = MongoDB()
+        self.timezone = pytz.timezone('Europe/Moscow')
 
     # Проверка на рабочее время
-    def is_working_time(self):
+    def is_working_time(self, user_id: int):
+        settings = self.mongo.get_user_settings(user_id)
         now = datetime.now(self.timezone)
         current_hour = now.hour
-        return self.working_hours_start <= current_hour < self.working_hours_end
+        working_hours_start = int(settings['working_hours_start'])
+        working_hours_end = int(settings['working_hours_end'])
+        return working_hours_start <= current_hour < working_hours_end
 
     # Форматирование данных о складе
-    def format_stock_data(self, data, highlight_low=False):
+    def format_stock_data(self, data, user_id: int, highlight_low=False):
         if not isinstance(data, list):
             return None
         result = []
         low_stock_items = []
+        
+        settings = self.mongo.get_user_settings(user_id)
+        low_stock_threshold = settings['low_stock_threshold']
         
         for item in data:
             vendor_code = item.get('vendorCode', 'N/A')
@@ -92,7 +97,7 @@ class WBStockBot:
             
             result.append(item_text)
             
-            if quantity <= CONFIG['LOW_STOCK_THRESHOLD']:
+            if quantity <= low_stock_threshold:
                 low_stock_items.append(item_text)
         
         if highlight_low:
@@ -103,7 +108,7 @@ class WBStockBot:
     async def fetch_wb_data(self, context: ContextTypes.DEFAULT_TYPE):
         chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
         
-        if not self.is_working_time():
+        if not self.is_working_time(chat_id):
             logger.info(f"Сейчас нерабочее время для чата {chat_id}")
             return
             
@@ -118,10 +123,11 @@ class WBStockBot:
                 'Authorization': wb_token
             }
             
+            settings = self.mongo.get_global_settings()
             timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 await context.bot.send_message(chat_id=chat_id, text="🔄 Считаю остатки...")
-                first_response = await self.make_api_request(session, CONFIG['API_URLS']['first'], headers, context, chat_id)
+                first_response = await self.make_api_request(session, settings['api_urls']['first'], headers, context, chat_id)
                 
                 if not first_response:
                     return
@@ -131,16 +137,16 @@ class WBStockBot:
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить task ID")
                     return
                 
-                await asyncio.sleep(CONFIG['DELAY_BETWEEN_REQUESTS'])
+                await asyncio.sleep(settings['delay_between_requests'])
                 
-                second_url = CONFIG['API_URLS']['second'].format(task_id=task_id)
+                second_url = settings['api_urls']['second'].format(task_id=task_id)
                 stock_data = await self.make_api_request(session, second_url, headers, context, chat_id)
                 
                 if not stock_data:
                     return
                 
-                formatted_data = self.format_stock_data(stock_data)
-                low_stock_data = self.format_stock_data(stock_data, highlight_low=True)
+                formatted_data = self.format_stock_data(stock_data, chat_id)
+                low_stock_data = self.format_stock_data(stock_data, chat_id, highlight_low=True)
                 
                 if formatted_data:
                     await context.bot.send_message(
@@ -231,6 +237,9 @@ class WBStockBot:
         chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
         
         try:
+            # Получаем настройки
+            settings = self.mongo.get_global_settings()
+            
             # Получаем токен пользователя
             wb_token = self.user_data.get_user_token(chat_id)
             if not wb_token:
@@ -248,7 +257,7 @@ class WBStockBot:
                 if not hasattr(context, 'job'):
                     await context.bot.send_message(chat_id=chat_id, text="🔄 Получаю коэффициенты складов...")
                 
-                response = await self.make_api_request(session, CONFIG['API_URLS']['coefficients'], headers, context, chat_id)
+                response = await self.make_api_request(session, settings['api_urls']['coefficients'], headers, context, chat_id)
                 
                 if not response or not isinstance(response, list):
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить данные о коэффициентах")
@@ -257,8 +266,8 @@ class WBStockBot:
                 # Подготовка списков ID складов
                 target_warehouses = []
                 target_names = set()  # Для хранения названий целевых складов
-                if CONFIG['TARGET_WAREHOUSE_ID']:
-                    target_str = str(CONFIG['TARGET_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
+                if settings['target_warehouse_id']:
+                    target_str = str(settings['target_warehouse_id']).replace('[', '').replace(']', '').replace("'", '')
                     target_warehouses = [int(id.strip()) for id in target_str.split(',') if id.strip()]
                 
                 # Добавляем выбранные пользователем склады
@@ -267,8 +276,8 @@ class WBStockBot:
                 
                 excluded_warehouses = []
                 excluded_names = set()
-                if CONFIG['EX_WAREHOUSE_ID']:
-                    excluded_str = str(CONFIG['EX_WAREHOUSE_ID']).replace('[', '').replace(']', '').replace("'", '')
+                if settings['ex_warehouse_id']:
+                    excluded_str = str(settings['ex_warehouse_id']).replace('[', '').replace(']', '').replace("'", '')
                     excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
                 
                 # Фильтруем и группируем данные
@@ -299,8 +308,8 @@ class WBStockBot:
                         
                         # Проверяем остальные условия фильтрации
                         if (item.get('boxTypeName') == "Короба" and 
-                            item.get('coefficient') >= CONFIG['MIN_COEFFICIENT'] and 
-                            item.get('coefficient') <= CONFIG['MAX_COEFFICIENT']):
+                            item.get('coefficient') >= settings['min_coefficient'] and 
+                            item.get('coefficient') <= settings['max_coefficient']):
                             
                             date = item.get('date', 'N/A')
                             coefficient = item.get('coefficient', 'N/A')
@@ -376,9 +385,10 @@ class WBStockBot:
             if chat_id in self.active_coefficient_jobs:
                 self.active_coefficient_jobs[chat_id].schedule_removal()
             
+            settings = self.mongo.get_user_settings(chat_id)
             job = self.application.job_queue.run_repeating(
                 callback=self.get_warehouse_coefficients,
-                interval=timedelta(minutes=CONFIG['CHECK_COEFFICIENTS_INTERVAL']),
+                interval=timedelta(minutes=settings['check_coefficients_interval']),
                 first=0,
                 chat_id=chat_id,
                 name=f"coefficients_{chat_id}"
