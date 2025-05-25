@@ -353,6 +353,18 @@ class WBStockBot:
                 if current_message:
                     messages.append(current_message)
                 
+                # Проверяем, есть ли данные для отправки
+                if not messages or (len(messages) == 1 and not any(warehouse_name in messages[0] for warehouse_name in target_names)):
+                    # Если это автоматическая проверка, не отправляем пустое сообщение
+                    if hasattr(context, 'job'):
+                        return
+                    # Если это ручной запрос, отправляем сообщение об отсутствии данных
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="ℹ️ Нет данных по выбранным складам"
+                    )
+                    return
+                
                 # Отправляем все сообщения
                 for message in messages:
                     await context.bot.send_message(chat_id=chat_id, text=message, parse_mode='Markdown')
