@@ -338,7 +338,11 @@ class WBStockBot:
                 
                 # Формируем все сообщения заранее
                 messages = []
+                has_data = False
                 for warehouse_name, dates in filtered_data.items():
+                    if not dates:  # Пропускаем склады без данных
+                        continue
+                    has_data = True
                     new_line = f"*{warehouse_name}*:\n"
                     for item in dates:
                         new_line += f"--- {item['date']} = {item['coefficient']}\n"
@@ -353,16 +357,8 @@ class WBStockBot:
                 if current_message:
                     messages.append(current_message)
                 
-                # Проверяем, есть ли данные для отправки
-                if not messages or (len(messages) == 1 and not any(warehouse_name in messages[0] for warehouse_name in target_names)):
-                    # Если это автоматическая проверка, не отправляем пустое сообщение
-                    if hasattr(context, 'job'):
-                        return
-                    # Если это ручной запрос, отправляем сообщение об отсутствии данных
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text="ℹ️ Нет данных по выбранным складам"
-                    )
+                # Если нет данных и это автоматическая проверка, не отправляем сообщение
+                if not has_data and hasattr(context, 'job'):
                     return
                 
                 # Отправляем все сообщения
