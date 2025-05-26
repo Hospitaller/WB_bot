@@ -58,11 +58,15 @@ class WBStockBot:
 
     # Проверка на рабочее время
     def is_working_time(self, user_id: int):
-        settings = self.mongo.get_user_settings(user_id)
+        user_settings = self.mongo.get_user_settings(user_id)
+        global_settings = self.mongo.get_global_settings()
+        
+        # Используем пользовательские настройки, если они есть, иначе глобальные
+        working_hours_start = user_settings.get('working_hours_start', global_settings.get('WORKING_HOURS_START', 8))
+        working_hours_end = user_settings.get('working_hours_end', global_settings.get('WORKING_HOURS_END', 22))
+        
         now = datetime.now(self.timezone)
         current_hour = now.hour
-        working_hours_start = int(settings['working_hours_start'])
-        working_hours_end = int(settings['working_hours_end'])
         return working_hours_start <= current_hour < working_hours_end
 
     # Форматирование данных о складе
@@ -444,7 +448,7 @@ class WBStockBot:
                     if last_notification:
                         next_day_start = datetime.combine(
                             last_notification.date() + timedelta(days=1),
-                            datetime.strptime(settings['working_hours_start'], '%H:%M').time()
+                            time(hour=settings['WORKING_HOURS_START'])
                         )
                         if datetime.utcnow() >= next_day_start:
                             # Очищаем TARGET_WAREHOUSE_ID_PAUSE

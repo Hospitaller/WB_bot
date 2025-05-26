@@ -13,7 +13,8 @@ CONFIG = {
         'coefficients': "https://supplies-api.wildberries.ru/api/v1/acceptance/coefficients"
     },
     'LOW_STOCK_THRESHOLD': 20,  # нижний порог остатков
-    'WORKING_HOURS': "08-22",   # Часы работы (МСК)
+    'WORKING_HOURS_START': 8,   # Начало рабочего дня (МСК)
+    'WORKING_HOURS_END': 22,    # Конец рабочего дня (МСК)
     'CHECK_STOCK_INTERVAL': 120,      # Интервал проверки остатков в минутах
     'CHECK_COEFFICIENTS_INTERVAL': 1,      # Интервал проверки коэффициентов в минутах
     'DELAY_BETWEEN_REQUESTS': 20,  # задержка между запросами

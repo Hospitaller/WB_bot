@@ -51,7 +51,8 @@ class MongoDB:
         """Инициализация настроек по умолчанию"""
         try:
             default_settings = {
-                'working_hours': CONFIG['WORKING_HOURS'],
+                'WORKING_HOURS_START': CONFIG['WORKING_HOURS_START'],
+                'WORKING_HOURS_END': CONFIG['WORKING_HOURS_END'],
                 'check_stock_interval': CONFIG['CHECK_STOCK_INTERVAL'],
                 'check_coefficients_interval': CONFIG['CHECK_COEFFICIENTS_INTERVAL'],
                 'low_stock_threshold': CONFIG['LOW_STOCK_THRESHOLD'],
