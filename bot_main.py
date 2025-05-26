@@ -530,7 +530,12 @@ class WBStockBot:
                     }
                 })
                 
-                await query.answer("✅ Уведомления по выбранным складам отключены до завтра")
+                # Отправляем сообщение об отключении
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="✅ Уведомления по выбранным складам отключены до завтра"
+                )
+                await query.answer()
             else:
                 await query.answer("❌ Ошибка: не удалось найти ID складов")
                 

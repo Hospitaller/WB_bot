@@ -163,7 +163,12 @@ class MongoDB:
             update_data = {}
             for key, value in settings.items():
                 if key in ['intervals', 'thresholds', 'warehouses', 'auto_coefficients']:
-                    update_data[f'settings.{key}'] = value
+                    if key == 'warehouses':
+                        # Для warehouses обновляем только указанные подполя
+                        for subkey, subvalue in value.items():
+                            update_data[f'settings.warehouses.{subkey}'] = subvalue
+                    else:
+                        update_data[f'settings.{key}'] = value
             
             if update_data:
                 update_data['metadata.updated'] = datetime.utcnow()
