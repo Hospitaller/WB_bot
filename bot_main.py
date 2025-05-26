@@ -76,8 +76,11 @@ class WBStockBot:
         result = []
         low_stock_items = []
         
-        settings = self.mongo.get_user_settings(user_id)
-        low_stock_threshold = settings['low_stock_threshold']
+        user_settings = self.mongo.get_user_settings(user_id)
+        global_settings = self.mongo.get_global_settings()
+        
+        # Используем пользовательские настройки, если они есть, иначе глобальные
+        low_stock_threshold = user_settings.get('low_stock_threshold', global_settings.get('low_stock_threshold', 20))
         
         for item in data:
             vendor_code = item.get('vendorCode', 'N/A')
@@ -131,7 +134,7 @@ class WBStockBot:
             timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 await context.bot.send_message(chat_id=chat_id, text="🔄 Считаю остатки...")
-                first_response = await self.make_api_request(session, settings['api_urls']['first'], headers, context, chat_id)
+                first_response = await self.make_api_request(session, settings.get('api_urls', {}).get('first'), headers, context, chat_id)
                 
                 if not first_response:
                     return
@@ -141,9 +144,9 @@ class WBStockBot:
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить task ID")
                     return
                 
-                await asyncio.sleep(settings['delay_between_requests'])
+                await asyncio.sleep(settings.get('delay_between_requests', 20))
                 
-                second_url = settings['api_urls']['second'].format(task_id=task_id)
+                second_url = settings.get('api_urls', {}).get('second', '').format(task_id=task_id)
                 stock_data = await self.make_api_request(session, second_url, headers, context, chat_id)
                 
                 if not stock_data:
@@ -271,8 +274,8 @@ class WBStockBot:
                 # Подготовка списков ID складов
                 target_warehouses = []
                 target_names = set()  # Для хранения названий целевых складов
-                if settings['target_warehouse_id']:
-                    target_str = str(settings['target_warehouse_id']).replace('[', '').replace(']', '').replace("'", '')
+                if settings.get('target_warehouse_id'):
+                    target_str = str(settings.get('target_warehouse_id')).replace('[', '').replace(']', '').replace("'", '')
                     target_warehouses = [int(id.strip()) for id in target_str.split(',') if id.strip()]
                 
                 # Добавляем выбранные пользователем склады
@@ -281,8 +284,8 @@ class WBStockBot:
                 
                 excluded_warehouses = []
                 excluded_names = set()
-                if settings['ex_warehouse_id']:
-                    excluded_str = str(settings['ex_warehouse_id']).replace('[', '').replace(']', '').replace("'", '')
+                if settings.get('ex_warehouse_id'):
+                    excluded_str = str(settings.get('ex_warehouse_id')).replace('[', '').replace(']', '').replace("'", '')
                     excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
                 
                 # Получаем список временно отключенных складов
@@ -321,8 +324,8 @@ class WBStockBot:
                         
                         # Проверяем остальные условия фильтрации
                         if (item.get('boxTypeName') == "Короба" and 
-                            item.get('coefficient') >= settings['min_coefficient'] and 
-                            item.get('coefficient') <= settings['max_coefficient']):
+                            item.get('coefficient') >= settings.get('min_coefficient', 0) and 
+                            item.get('coefficient') <= settings.get('max_coefficient', 6)):
                             
                             date = item.get('date', 'N/A')
                             coefficient = item.get('coefficient', 'N/A')
@@ -519,8 +522,12 @@ class WBStockBot:
                 self.active_coefficient_jobs[chat_id].schedule_removal()
             
             settings = self.mongo.get_user_settings(chat_id)
-            # Используем значение из настроек пользователя или значение по умолчанию из CONFIG
-            interval = settings.get('check_coefficients_interval', CONFIG['CHECK_COEFFICIENTS_INTERVAL'])
+            global_settings = self.mongo.get_global_settings()
+            
+            # Используем пользовательские настройки, если они есть, иначе глобальные
+            interval = settings.get('check_coefficients_interval', 
+                                  global_settings.get('check_coefficients_interval', 
+                                  CONFIG['CHECK_COEFFICIENTS_INTERVAL']))
             
             job = self.application.job_queue.run_repeating(
                 callback=self.get_warehouse_coefficients,
