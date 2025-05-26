@@ -53,6 +53,8 @@ class WBStockBot:
         self.user_data = UserData()
         self.mongo = MongoDB()
         self.timezone = pytz.timezone('Europe/Moscow')
+        self.warehouse_selection = {}  # Инициализация словаря для хранения выбранных складов
+        self.warehouse_selection_order = {}  # Инициализация словаря для хранения порядка складов
         
         # Загружаем сохраненные склады для всех пользователей
         self.load_saved_warehouses()
