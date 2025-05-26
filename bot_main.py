@@ -698,6 +698,8 @@ class WBStockBot:
             
             self.warehouse_selection[chat_id].add(warehouse_id)
             self.warehouse_selection_order[chat_id].append(warehouse_id)
+            # Сохраняем в базу данных после добавления склада
+            self.mongo.save_selected_warehouses(chat_id, list(self.warehouse_selection[chat_id]))
             await self.show_warehouse_selection(update, context)
             
         elif query.data.startswith("warehouse_page_"):
@@ -715,6 +717,9 @@ class WBStockBot:
                     # Обновляем порядок
                     if chat_id in self.warehouse_selection_order:
                         self.warehouse_selection_order[chat_id].pop()
+                    
+                    # Сохраняем в базу данных после удаления склада
+                    self.mongo.save_selected_warehouses(chat_id, list(self.warehouse_selection[chat_id]))
                     
                     # Получаем список всех складов для отображения названия удаленного склада
                     warehouses = await self.get_warehouse_list(context, chat_id)
@@ -842,6 +847,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 bot.warehouse_selection[chat_id] = set()
             if chat_id in bot.warehouse_selection_order:
                 bot.warehouse_selection_order[chat_id] = []
+            # Сохраняем пустой список складов в базу данных
+            bot.mongo.save_selected_warehouses(chat_id, [])
                 
             class FakeContext:
                 def __init__(self, chat_id, bot):
