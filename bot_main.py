@@ -161,11 +161,11 @@ class WBStockBot:
                 'Authorization': wb_token
             }
             
-            settings = self.mongo.get_global_settings()
+            settings = self.mongo.get_user_settings(chat_id)
             timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 await context.bot.send_message(chat_id=chat_id, text="🔄 Считаю остатки...")
-                first_response = await self.make_api_request(session, settings.get('api_urls', {}).get('first'), headers, context, chat_id)
+                first_response = await self.make_api_request(session, settings['api']['urls']['stock_request'], headers, context, chat_id)
                 
                 if not first_response:
                     return
@@ -175,9 +175,9 @@ class WBStockBot:
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить task ID")
                     return
                 
-                await asyncio.sleep(settings.get('delay_between_requests', 20))
+                await asyncio.sleep(settings['api']['request_delay'])
                 
-                second_url = settings.get('api_urls', {}).get('second', '').format(task_id=task_id)
+                second_url = settings['api']['urls']['stock_download'].format(task_id=task_id)
                 stock_data = await self.make_api_request(session, second_url, headers, context, chat_id)
                 
                 if not stock_data:
@@ -613,8 +613,9 @@ class WBStockBot:
                 'Authorization': wb_token
             }
             
+            settings = self.mongo.get_user_settings(chat_id)
             async with aiohttp.ClientSession() as session:
-                response = await self.make_api_request(session, CONFIG['API_URLS']['coefficients'], headers, context, chat_id)
+                response = await self.make_api_request(session, settings['api']['urls']['coefficients'], headers, context, chat_id)
                 
                 if not response or not isinstance(response, list):
                     return None

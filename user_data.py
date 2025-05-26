@@ -30,7 +30,7 @@ class UserData:
             'auto_check_enabled': False
         }
         # Сохраняем пользователя в MongoDB
-        self.mongo.init_user(user_id, auth_token)
+        self.mongo.init_user(user_id)
 
     def get_user_token(self, user_id: int) -> Optional[str]:
         load_dotenv(self.env_file, override=True)
@@ -38,7 +38,7 @@ class UserData:
 
     def is_user_exists(self, user_id: int) -> bool:
         # Проверяем существование пользователя в MongoDB
-        user = self.mongo.users.find_one({'user_id': user_id})
+        user = self.mongo.settings.find_one({'user_id': user_id})
         return user is not None
 
     def set_auto_check_status(self, user_id: int, status: bool):

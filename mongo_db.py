@@ -12,31 +12,13 @@ class MongoDB:
             self.client = MongoClient(CONFIG['MONGODB_URI'])
             self.db = self.client[CONFIG['MONGODB_DB']]
             
-            # Проверяем существование коллекций
-            collections = self.db.list_collection_names()
-            logger.info(f"Existing collections: {collections}")
-            
-            # Создаем коллекции, если их нет
-            if 'users' not in collections:
-                logger.info("Creating 'users' collection")
-                self.db.create_collection('users')
-            
-            if 'logs' not in collections:
-                logger.info("Creating 'logs' collection")
-                self.db.create_collection('logs')
-                
-            if 'settings' not in collections:
-                logger.info("Creating 'settings' collection")
-                self.db.create_collection('settings')
-                # Инициализируем настройки по умолчанию
-                self.init_default_settings()
-            
-            self.users = self.db.users
-            self.logs = self.db.logs
+            # Получаем ссылки на коллекции
             self.settings = self.db.settings
-            self.activities = self.db.activities
+            self.logs = self.db.logs
+            
+            # Создаем индексы
             self.create_indexes()
-            logger.info("Successfully connected to MongoDB and initialized collections")
+            logger.info("Successfully connected to MongoDB")
         except Exception as e:
             logger.error(f"Failed to connect to MongoDB: {str(e)}")
             raise
@@ -44,81 +26,18 @@ class MongoDB:
     def create_indexes(self):
         """Создание индексов для оптимизации запросов"""
         self.settings.create_index('user_id', unique=True)
-        self.activities.create_index([('user_id', 1), ('timestamp', -1)])
-        self.activities.create_index('timestamp', expireAfterSeconds=30*24*60*60)  # TTL 30 дней
-
-    def init_default_settings(self):
-        """Инициализация настроек по умолчанию"""
-        try:
-            default_settings = {
-                '_id': 'global',
-                'default_settings': {
-                    'intervals': {
-                        'check_stock': CONFIG['CHECK_STOCK_INTERVAL'],
-                        'check_coefficients': CONFIG['CHECK_COEFFICIENTS_INTERVAL']
-                    },
-                    'thresholds': {
-                        'low_stock': CONFIG['LOW_STOCK_THRESHOLD'],
-                        'min_coefficient': CONFIG['MIN_COEFFICIENT'],
-                        'max_coefficient': CONFIG['MAX_COEFFICIENT']
-                    },
-                    'warehouses': {
-                        'target': [],
-                        'excluded': CONFIG['EX_WAREHOUSE_ID'].split(',') if CONFIG['EX_WAREHOUSE_ID'] else [],
-                        'paused': []
-                    },
-                    'api': {
-                        'urls': {
-                            'stock': {
-                                'request': CONFIG['API_URLS']['first'],
-                                'download': CONFIG['API_URLS']['second']
-                            },
-                            'coefficients': CONFIG['API_URLS']['coefficients']
-                        },
-                        'request_delay': CONFIG['DELAY_BETWEEN_REQUESTS']
-                    },
-                    'working_hours': {
-                        'start': CONFIG['WORKING_HOURS_START'],
-                        'end': CONFIG['WORKING_HOURS_END']
-                    }
-                }
-            }
-            
-            # Проверяем, есть ли уже настройки
-            if self.settings.count_documents({}) == 0:
-                self.settings.insert_one(default_settings)
-                logger.info("Default settings initialized in database")
-            else:
-                logger.info("Settings already exist in database")
-        except Exception as e:
-            logger.error(f"Failed to initialize default settings: {str(e)}")
-            raise
 
     def get_global_settings(self):
         """Получение глобальных настроек"""
         try:
             settings = self.settings.find_one({'_id': 'global'})
             if not settings:
-                logger.warning("Global settings not found, initializing defaults")
-                self.init_default_settings()
-                settings = self.settings.find_one({'_id': 'global'})
+                logger.error("Global settings not found in database")
+                raise Exception("Global settings not found in database")
             return settings
         except Exception as e:
             logger.error(f"Failed to get global settings: {str(e)}")
             raise
-
-    def update_global_settings(self, settings: dict):
-        """Обновление глобальных настроек"""
-        try:
-            result = self.settings.update_one(
-                {'_id': 'global'},
-                {'$set': settings}
-            )
-            logger.info(f"Global settings updated: {result.modified_count} documents modified")
-            return result.modified_count > 0
-        except Exception as e:
-            logger.error(f"Failed to update global settings: {str(e)}")
-            return False
 
     def init_user(self, user_id: int):
         """Инициализация нового пользователя"""
@@ -129,15 +48,17 @@ class MongoDB:
                     'intervals': {},
                     'thresholds': {},
                     'warehouses': {
-                        'disabled': [],
                         'target': [],
-                        'paused': []
+                        'excluded': [],
+                        'paused': [],
+                        'disabled': []
                     },
+                    'working_hours': {},
                     'auto_coefficients': False
                 },
                 'metadata': {
-                    'created_at': datetime.utcnow(),
-                    'updated_at': datetime.utcnow(),
+                    'created': datetime.utcnow(),
+                    'updated': datetime.utcnow(),
                     'last_notification': None
                 }
             }
@@ -159,7 +80,7 @@ class MongoDB:
                 {'user_id': user_id},
                 {
                     '$set': {
-                        'metadata.updated_at': datetime.utcnow()
+                        'metadata.updated': datetime.utcnow()
                     }
                 }
             )
@@ -183,7 +104,7 @@ class MongoDB:
                 {
                     '$set': {
                         'settings.auto_coefficients': status,
-                        'metadata.updated_at': datetime.utcnow()
+                        'metadata.updated': datetime.utcnow()
                     }
                 }
             )
@@ -191,13 +112,6 @@ class MongoDB:
         except Exception as e:
             logger.error(f"Failed to update auto_coefficients status for {user_id}: {str(e)}")
             raise
-
-    def update_auto_stock(self, user_id: int, status: bool):
-        """Обновление статуса автоматической проверки остатков"""
-        self.users.update_one(
-            {'user_id': user_id},
-            {'$set': {'auto_stock': status}}
-        )
 
     def get_user_settings(self, user_id: int) -> dict:
         """Получение настроек пользователя с мержем глобальных настроек"""
@@ -234,6 +148,9 @@ class MongoDB:
             # Добавляем статус автоотслеживания
             merged_settings['auto_coefficients'] = user_settings['settings'].get('auto_coefficients', False)
             
+            # Добавляем API настройки из глобальных настроек
+            merged_settings['api'] = global_settings['api']
+            
             return merged_settings
         except Exception as e:
             logger.error(f"Failed to get user settings for {user_id}: {str(e)}")
@@ -249,7 +166,7 @@ class MongoDB:
                     update_data[f'settings.{key}'] = value
             
             if update_data:
-                update_data['metadata.updated_at'] = datetime.utcnow()
+                update_data['metadata.updated'] = datetime.utcnow()
                 self.settings.update_one(
                     {'user_id': user_id},
                     {'$set': update_data}
@@ -267,7 +184,7 @@ class MongoDB:
                 {
                     '$set': {
                         'settings.warehouses.target': warehouses,
-                        'metadata.updated_at': datetime.utcnow()
+                        'metadata.updated': datetime.utcnow()
                     }
                 }
             )
@@ -307,7 +224,7 @@ class MongoDB:
                 {'user_id': user_id},
                 {
                     '$addToSet': {f'settings.warehouses.{status}': warehouse_id},
-                    '$set': {'metadata.updated_at': datetime.utcnow()}
+                    '$set': {'metadata.updated': datetime.utcnow()}
                 }
             )
             
@@ -332,7 +249,7 @@ class MongoDB:
                 {'user_id': user_id},
                 {
                     '$pull': {f'settings.warehouses.{status}': warehouse_id},
-                    '$set': {'metadata.updated_at': datetime.utcnow()}
+                    '$set': {'metadata.updated': datetime.utcnow()}
                 }
             )
             
@@ -354,25 +271,11 @@ class MongoDB:
             'action': action,
             'timestamp': datetime.utcnow()
         }
-        self.activities.insert_one(activity)
-
-    def get_user_stats(self, user_id: int):
-        """Получение статистики пользователя"""
-        user = self.users.find_one({'user_id': user_id})
-        if not user:
-            return None
-        
-        return {
-            'user_id': user['user_id'],
-            'auto_coefficients': user.get('auto_coefficients', False),
-            'auto_stock': user.get('auto_stock', False),
-            'last_activity': user.get('last_activity'),
-            'warehouse_count': len(user.get('warehouse_selection', []))
-        }
+        self.logs.insert_one(activity)
 
     def get_user_activities(self, user_id: int, limit: int = 100) -> list:
         """Получение последних активностей пользователя"""
-        return list(self.activities.find(
+        return list(self.logs.find(
             {'user_id': user_id},
             {'_id': 0}
         ).sort('timestamp', -1).limit(limit))
@@ -385,7 +288,7 @@ class MongoDB:
                 {
                     '$set': {
                         'metadata.last_notification': datetime.utcnow(),
-                        'metadata.updated_at': datetime.utcnow()
+                        'metadata.updated': datetime.utcnow()
                     }
                 }
             )
