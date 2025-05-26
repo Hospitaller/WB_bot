@@ -51,8 +51,6 @@ class WBStockBot:
         self.active_jobs = {}
         self.active_coefficient_jobs = {}  # Для хранения задач проверки коэффициентов
         self.user_data = UserData()
-        self.warehouse_selection = {}  # Для хранения выбранных складов пользователями
-        self.warehouse_selection_order = {}  # Для хранения порядка добавления складов
         self.mongo = MongoDB()
         self.timezone = pytz.timezone('Europe/Moscow')
         
@@ -284,16 +282,9 @@ class WBStockBot:
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить данные о коэффициентах")
                     return
                 
-                # Подготовка списков ID складов
-                target_warehouses = []
+                # Получаем выбранные склады из БД
+                target_warehouses = self.mongo.get_selected_warehouses(chat_id)
                 target_names = set()  # Для хранения названий целевых складов
-                if settings.get('target_warehouse_id'):
-                    target_str = str(settings.get('target_warehouse_id')).replace('[', '').replace(']', '').replace("'", '')
-                    target_warehouses = [int(id.strip()) for id in target_str.split(',') if id.strip()]
-                
-                # Добавляем выбранные пользователем склады
-                if chat_id in self.warehouse_selection:
-                    target_warehouses.extend(self.warehouse_selection[chat_id])
                 
                 excluded_warehouses = []
                 excluded_names = set()
@@ -622,8 +613,8 @@ class WBStockBot:
             # Сортируем склады по имени
             sorted_warehouses = dict(sorted(warehouses.items(), key=lambda x: x[1]))
             
-            # Получаем уже выбранные склады
-            selected_warehouses = self.warehouse_selection.get(chat_id, set())
+            # Получаем уже выбранные склады из БД
+            selected_warehouses = set(self.mongo.get_selected_warehouses(chat_id))
             
             # Фильтруем уже выбранные склады
             available_warehouses = {k: v for k, v in sorted_warehouses.items() if k not in selected_warehouses}
@@ -665,11 +656,8 @@ class WBStockBot:
             message_text = "Выберите склады для мониторинга коэффициентов:\n"
             if selected_warehouses:
                 message_text += "\nВыбранные склады:\n"
-                # Используем порядок добавления для отображения
-                if chat_id in self.warehouse_selection_order:
-                    for warehouse_id in self.warehouse_selection_order[chat_id]:
-                        if warehouse_id in selected_warehouses:
-                            message_text += f"- {warehouses.get(warehouse_id, 'Неизвестный склад')}\n"
+                for warehouse_id in selected_warehouses:
+                    message_text += f"- {warehouses.get(warehouse_id, 'Неизвестный склад')}\n"
             
             if update.callback_query:
                 await update.callback_query.message.edit_text(message_text, reply_markup=reply_markup)
@@ -691,15 +679,12 @@ class WBStockBot:
         
         if query.data.startswith("select_warehouse_"):
             warehouse_id = int(query.data.split("_")[-1])
-            if chat_id not in self.warehouse_selection:
-                self.warehouse_selection[chat_id] = set()
-            if chat_id not in self.warehouse_selection_order:
-                self.warehouse_selection_order[chat_id] = []
-            
-            self.warehouse_selection[chat_id].add(warehouse_id)
-            self.warehouse_selection_order[chat_id].append(warehouse_id)
-            # Сохраняем в базу данных после добавления склада
-            self.mongo.save_selected_warehouses(chat_id, list(self.warehouse_selection[chat_id]))
+            # Получаем текущие склады из БД
+            current_warehouses = self.mongo.get_selected_warehouses(chat_id)
+            # Добавляем новый склад
+            current_warehouses.append(warehouse_id)
+            # Сохраняем обновленный список в БД
+            self.mongo.save_selected_warehouses(chat_id, current_warehouses)
             await self.show_warehouse_selection(update, context)
             
         elif query.data.startswith("warehouse_page_"):
@@ -708,18 +693,13 @@ class WBStockBot:
             
         elif query.data == "remove_last_warehouse":
             try:
-                if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
-                    # Преобразуем множество в список, удаляем последний элемент и создаем новое множество
-                    warehouses_list = list(self.warehouse_selection[chat_id])
-                    removed_warehouse = warehouses_list.pop()
-                    self.warehouse_selection[chat_id] = set(warehouses_list)
-                    
-                    # Обновляем порядок
-                    if chat_id in self.warehouse_selection_order:
-                        self.warehouse_selection_order[chat_id].pop()
-                    
-                    # Сохраняем в базу данных после удаления склада
-                    self.mongo.save_selected_warehouses(chat_id, list(self.warehouse_selection[chat_id]))
+                # Получаем текущие склады из БД
+                current_warehouses = self.mongo.get_selected_warehouses(chat_id)
+                if current_warehouses:
+                    # Удаляем последний склад
+                    removed_warehouse = current_warehouses.pop()
+                    # Сохраняем обновленный список в БД
+                    self.mongo.save_selected_warehouses(chat_id, current_warehouses)
                     
                     # Получаем список всех складов для отображения названия удаленного склада
                     warehouses = await self.get_warehouse_list(context, chat_id)
@@ -738,9 +718,9 @@ class WBStockBot:
                 await query.message.edit_text("❌ Произошла ошибка при удалении склада")
             
         elif query.data == "finish_warehouse_selection":
-            if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
-                # Сохраняем выбранные склады в базу данных
-                self.mongo.save_selected_warehouses(chat_id, list(self.warehouse_selection[chat_id]))
+            # Получаем текущие склады из БД
+            current_warehouses = self.mongo.get_selected_warehouses(chat_id)
+            if current_warehouses:
                 await self.start_auto_coefficients(chat_id)
                 await query.message.edit_text(
                     f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут(ы) в рабочее время)"

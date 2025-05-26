@@ -168,18 +168,42 @@ class MongoDB:
         )
 
     def save_selected_warehouses(self, user_id: int, warehouses: list):
-        """Сохранение выбранных складов пользователя"""
-        self.users.update_one(
-            {'user_id': user_id},
-            {'$set': {'settings.target_warehouses': warehouses}}
-        )
+        """Сохранение выбранных складов пользователя в поле target_warehouses"""
+        try:
+            result = self.settings.update_one(
+                {'user_id': user_id},
+                {
+                    '$set': {
+                        'target_warehouses': warehouses,
+                        'updated_at': datetime.utcnow()
+                    }
+                }
+            )
+            
+            if result.modified_count > 0:
+                logger.info(f"Склады успешно сохранены для пользователя {user_id}: {warehouses}")
+                return True
+            else:
+                logger.warning(f"Не удалось сохранить склады для пользователя {user_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Ошибка при сохранении складов для пользователя {user_id}: {str(e)}")
+            return False
 
     def get_selected_warehouses(self, user_id: int) -> list:
-        """Получение выбранных складов пользователя"""
-        user = self.users.find_one({'user_id': user_id})
-        if user and 'settings' in user and 'target_warehouses' in user['settings']:
-            return user['settings']['target_warehouses']
-        return []
+        """Получение выбранных складов пользователя из поля target_warehouses"""
+        try:
+            settings = self.settings.find_one({'user_id': user_id})
+            if settings and 'target_warehouses' in settings:
+                warehouses = settings['target_warehouses']
+                logger.info(f"Получены склады для пользователя {user_id}: {warehouses}")
+                return warehouses
+            logger.warning(f"Склады не найдены для пользователя {user_id}")
+            return []
+        except Exception as e:
+            logger.error(f"Ошибка при получении складов для пользователя {user_id}: {str(e)}")
+            return []
 
     def log_activity(self, user_id: int, action: str):
         """Логирование активности пользователя"""
