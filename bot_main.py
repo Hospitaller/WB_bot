@@ -55,6 +55,19 @@ class WBStockBot:
         self.warehouse_selection_order = {}  # Для хранения порядка добавления складов
         self.mongo = MongoDB()
         self.timezone = pytz.timezone('Europe/Moscow')
+        
+        # Загружаем сохраненные склады для всех пользователей
+        self.load_saved_warehouses()
+
+    def load_saved_warehouses(self):
+        """Загрузка сохраненных складов для всех пользователей"""
+        users = self.mongo.users.find({})
+        for user in users:
+            user_id = user['user_id']
+            warehouses = self.mongo.get_selected_warehouses(user_id)
+            if warehouses:
+                self.warehouse_selection[user_id] = set(warehouses)
+                self.warehouse_selection_order[user_id] = warehouses
 
     # Проверка на рабочее время
     def is_working_time(self, user_id: int):
@@ -680,7 +693,11 @@ class WBStockBot:
             warehouse_id = int(query.data.split("_")[-1])
             if chat_id not in self.warehouse_selection:
                 self.warehouse_selection[chat_id] = set()
+            if chat_id not in self.warehouse_selection_order:
+                self.warehouse_selection_order[chat_id] = []
+            
             self.warehouse_selection[chat_id].add(warehouse_id)
+            self.warehouse_selection_order[chat_id].append(warehouse_id)
             await self.show_warehouse_selection(update, context)
             
         elif query.data.startswith("warehouse_page_"):
@@ -694,6 +711,10 @@ class WBStockBot:
                     warehouses_list = list(self.warehouse_selection[chat_id])
                     removed_warehouse = warehouses_list.pop()
                     self.warehouse_selection[chat_id] = set(warehouses_list)
+                    
+                    # Обновляем порядок
+                    if chat_id in self.warehouse_selection_order:
+                        self.warehouse_selection_order[chat_id].pop()
                     
                     # Получаем список всех складов для отображения названия удаленного склада
                     warehouses = await self.get_warehouse_list(context, chat_id)
@@ -713,6 +734,8 @@ class WBStockBot:
             
         elif query.data == "finish_warehouse_selection":
             if chat_id in self.warehouse_selection and self.warehouse_selection[chat_id]:
+                # Сохраняем выбранные склады в базу данных
+                self.mongo.save_selected_warehouses(chat_id, list(self.warehouse_selection[chat_id]))
                 await self.start_auto_coefficients(chat_id)
                 await query.message.edit_text(
                     f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут(ы) в рабочее время)"

@@ -167,6 +167,20 @@ class MongoDB:
             {'$set': {'settings': settings}}
         )
 
+    def save_selected_warehouses(self, user_id: int, warehouses: list):
+        """Сохранение выбранных складов пользователя"""
+        self.users.update_one(
+            {'user_id': user_id},
+            {'$set': {'settings.target_warehouses': warehouses}}
+        )
+
+    def get_selected_warehouses(self, user_id: int) -> list:
+        """Получение выбранных складов пользователя"""
+        user = self.users.find_one({'user_id': user_id})
+        if user and 'settings' in user and 'target_warehouses' in user['settings']:
+            return user['settings']['target_warehouses']
+        return []
+
     def log_activity(self, user_id: int, action: str):
         """Логирование активности пользователя"""
         activity = {
