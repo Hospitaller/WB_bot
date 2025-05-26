@@ -71,16 +71,34 @@ class WBStockBot:
 
     # Проверка на рабочее время
     def is_working_time(self, user_id: int):
-        user_settings = self.mongo.get_user_settings(user_id)
-        global_settings = self.mongo.get_global_settings()
-        
-        # Используем пользовательские настройки, если они есть, иначе глобальные
-        working_hours_start = user_settings.get('working_hours_start', global_settings.get('WORKING_HOURS_START', 8))
-        working_hours_end = user_settings.get('working_hours_end', global_settings.get('WORKING_HOURS_END', 22))
-        
-        now = datetime.now(self.timezone)
-        current_hour = now.hour
-        return working_hours_start <= current_hour < working_hours_end
+        """Проверка на рабочее время"""
+        try:
+            settings = self.mongo.get_user_settings(user_id)
+            if not settings:
+                logger.error(f"No settings found for user {user_id} in is_working_time")
+                return False
+                
+            now = datetime.now(self.timezone)
+            current_time = now.time()
+            
+            # Получаем время начала и конца рабочего дня
+            working_hours = settings.get('working_hours', {})
+            working_hours_start = time(hour=working_hours.get('start', 9))
+            working_hours_end = time(hour=working_hours.get('end', 22))
+            
+            logger.info(f"Checking working hours for user {user_id}:")
+            logger.info(f"Current time: {current_time}")
+            logger.info(f"Working hours start: {working_hours_start}")
+            logger.info(f"Working hours end: {working_hours_end}")
+            logger.info(f"Settings: {settings}")
+            
+            is_working = working_hours_start <= current_time < working_hours_end
+            logger.info(f"Is working time: {is_working}")
+            
+            return is_working
+        except Exception as e:
+            logger.error(f"Error checking working hours for user {user_id}: {str(e)}", exc_info=True)
+            return False
 
     # Форматирование данных о складе
     def format_stock_data(self, data, user_id: int, highlight_low=False):
@@ -258,8 +276,10 @@ class WBStockBot:
         
         try:
             # Получаем настройки
-            settings = self.mongo.get_global_settings()
-            user_settings = self.mongo.get_user_settings(chat_id)
+            settings = self.mongo.get_user_settings(chat_id)
+            if not settings:
+                logger.error(f"No settings found for user {chat_id} in get_warehouse_coefficients")
+                return
             
             # Получаем токен пользователя
             wb_token = self.user_data.get_user_token(chat_id)
@@ -278,25 +298,20 @@ class WBStockBot:
                 if not hasattr(context, 'job'):
                     await context.bot.send_message(chat_id=chat_id, text="🔄 Получаю коэффициенты складов...")
                 
-                response = await self.make_api_request(session, settings['api_urls']['coefficients'], headers, context, chat_id)
+                response = await self.make_api_request(session, settings['api']['urls']['coefficients'], headers, context, chat_id)
                 
                 if not response or not isinstance(response, list):
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить данные о коэффициентах")
                     return
                 
-                # Получаем выбранные склады из БД
-                target_warehouses = self.mongo.get_selected_warehouses(chat_id)
+                # Получаем настройки складов
+                warehouses = settings.get('warehouses', {})
+                target_warehouses = warehouses.get('target', [])
+                excluded_warehouses = warehouses.get('excluded', [])
+                paused_warehouses = warehouses.get('paused', [])
+                
                 target_names = set()  # Для хранения названий целевых складов
-                
-                excluded_warehouses = []
-                excluded_names = set()
-                if settings.get('ex_warehouse_id'):
-                    excluded_str = str(settings.get('ex_warehouse_id')).replace('[', '').replace(']', '').replace("'", '')
-                    excluded_warehouses = [int(id.strip()) for id in excluded_str.split(',') if id.strip()]
-                
-                # Получаем список временно отключенных складов
-                paused_warehouses = settings.get('TARGET_WAREHOUSE_ID_PAUSE', [])
-                paused_warehouses = [int(id.strip()) for id in paused_warehouses if id.strip()]
+                excluded_names = set()  # Для хранения названий исключенных складов
                 
                 # Фильтруем и группируем данные
                 filtered_data = {}
@@ -312,7 +327,7 @@ class WBStockBot:
                         warehouse_name = item.get('warehouseName', 'N/A')
                         
                         # Пропускаем временно отключенные склады
-                        if warehouse_id in paused_warehouses:
+                        if str(warehouse_id) in paused_warehouses:
                             continue
                         
                         # Собираем названия целевых складов
@@ -320,7 +335,7 @@ class WBStockBot:
                             target_names.add(warehouse_name)
                         
                         # Пропускаем склады из списка исключений
-                        if excluded_warehouses and warehouse_id in excluded_warehouses:
+                        if str(warehouse_id) in excluded_warehouses:
                             excluded_names.add(warehouse_name)
                             continue
                         
@@ -329,9 +344,10 @@ class WBStockBot:
                             continue
                         
                         # Проверяем остальные условия фильтрации
+                        thresholds = settings.get('thresholds', {})
                         if (item.get('boxTypeName') == "Короба" and 
-                            item.get('coefficient') >= settings.get('min_coefficient', 0) and 
-                            item.get('coefficient') <= settings.get('max_coefficient', 6)):
+                            item.get('coefficient') >= thresholds.get('min_coefficient', 0) and 
+                            item.get('coefficient') <= thresholds.get('max_coefficient', 6)):
                             
                             date = item.get('date', 'N/A')
                             coefficient = item.get('coefficient', 'N/A')
@@ -449,20 +465,24 @@ class WBStockBot:
                             logger.error(f"Не удалось отправить даже разбитое сообщение: {str(e)}")
                 
                 # Обновляем время последнего уведомления
-                self.mongo.update_user_settings(chat_id, {'last_notification': datetime.utcnow()})
+                self.mongo.update_last_notification(chat_id)
                 
                 # Проверяем, нужно ли сбросить отключенные склады
                 if paused_warehouses:
-                    last_notification = user_settings.get('last_notification')
+                    last_notification = self.mongo.get_last_notification(chat_id)
                     if last_notification:
+                        working_hours = settings.get('working_hours', {})
                         next_day_start = datetime.combine(
                             last_notification.date() + timedelta(days=1),
-                            time(hour=settings['WORKING_HOURS_START'])
+                            time(hour=working_hours.get('start', 9))
                         )
                         if datetime.utcnow() >= next_day_start:
-                            # Очищаем TARGET_WAREHOUSE_ID_PAUSE
-                            settings['TARGET_WAREHOUSE_ID_PAUSE'] = []
-                            self.mongo.update_global_settings(settings)
+                            # Очищаем paused склады
+                            self.mongo.update_user_settings(chat_id, {
+                                'warehouses': {
+                                    'paused': []
+                                }
+                            })
             
         except Exception as e:
             logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
@@ -476,7 +496,10 @@ class WBStockBot:
         
         try:
             # Получаем настройки
-            settings = self.mongo.get_global_settings()
+            settings = self.mongo.get_user_settings(user_id)
+            if not settings:
+                await query.answer("❌ Ошибка: не удалось получить настройки")
+                return
             
             # Получаем ID складов из названий
             warehouses_data = await self.get_warehouse_list(context, user_id)
@@ -492,15 +515,12 @@ class WBStockBot:
                     warehouse_ids.append(str(warehouse_id))
             
             if warehouse_ids:
-                # Добавляем ID складов в TARGET_WAREHOUSE_ID_PAUSE
-                paused_warehouses = settings.get('TARGET_WAREHOUSE_ID_PAUSE', [])
-                paused_warehouses.extend(warehouse_ids)
-                # Удаляем дубликаты
-                paused_warehouses = list(set(paused_warehouses))
-                
-                # Обновляем настройки
-                settings['TARGET_WAREHOUSE_ID_PAUSE'] = paused_warehouses
-                self.mongo.update_global_settings(settings)
+                # Добавляем ID складов в paused
+                self.mongo.update_user_settings(user_id, {
+                    'warehouses': {
+                        'paused': warehouse_ids
+                    }
+                })
                 
                 await query.answer("✅ Уведомления по выбранным складам отключены до завтра")
             else:
@@ -524,16 +544,20 @@ class WBStockBot:
 
     async def start_auto_coefficients(self, chat_id: int):
         try:
+            logger.info(f"Starting auto coefficients for user {chat_id}")
+            
             if chat_id in self.active_coefficient_jobs:
+                logger.info(f"Removing existing job for user {chat_id}")
                 self.active_coefficient_jobs[chat_id].schedule_removal()
             
             settings = self.mongo.get_user_settings(chat_id)
-            global_settings = self.mongo.get_global_settings()
-            
-            # Используем пользовательские настройки, если они есть, иначе глобальные
-            interval = settings.get('check_coefficients_interval', 
-                                  global_settings.get('check_coefficients_interval', 
-                                  CONFIG['CHECK_COEFFICIENTS_INTERVAL']))
+            if not settings:
+                logger.error(f"No settings found for user {chat_id} in start_auto_coefficients")
+                return None
+                
+            # Используем интервал из настроек
+            interval = settings.get('intervals', {}).get('check_coefficients', 1)
+            logger.info(f"Using interval {interval} minutes for user {chat_id}")
             
             job = self.application.job_queue.run_repeating(
                 callback=self.get_warehouse_coefficients,
@@ -542,9 +566,16 @@ class WBStockBot:
                 chat_id=chat_id,
                 name=f"coefficients_{chat_id}"
             )
+            
+            logger.info(f"Created new job for user {chat_id}")
             self.active_coefficient_jobs[chat_id] = job
             self.mongo.update_auto_coefficients(chat_id, True)
             self.mongo.log_activity(chat_id, 'start_auto_coefficients')
+            
+            # Проверяем рабочее время
+            is_working = self.is_working_time(chat_id)
+            logger.info(f"Working time check for user {chat_id}: {is_working}")
+            
             return job
         except Exception as e:
             logger.critical(f"CRITICAL: Ошибка запуска автоматических проверок коэффициентов: {str(e)}", exc_info=True)
