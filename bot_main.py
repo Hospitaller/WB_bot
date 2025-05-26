@@ -595,6 +595,13 @@ class WBStockBot:
                 self.active_coefficient_jobs[chat_id].schedule_removal()
                 del self.active_coefficient_jobs[chat_id]
                 self.mongo.update_auto_coefficients(chat_id, False)
+                # Очищаем paused и target склады
+                self.mongo.update_user_settings(chat_id, {
+                    'warehouses': {
+                        'paused': [],
+                        'target': []
+                    }
+                })
                 self.mongo.log_activity(chat_id, 'stop_auto_coefficients')
                 return True
             return False
