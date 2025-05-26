@@ -821,14 +821,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == 'check_all_coefficients':
             # Логируем запрос на проверку всех коэффициентов
             bot.mongo.log_activity(user_id, 'check_all_coefficients_requested')
-            # Очищаем выбранные склады перед получением данных по всем складам
-            chat_id = update.effective_chat.id
-            if chat_id in bot.warehouse_selection:
-                bot.warehouse_selection[chat_id] = set()
-            if chat_id in bot.warehouse_selection_order:
-                bot.warehouse_selection_order[chat_id] = []
-            # Сохраняем пустой список складов в базу данных
-            bot.mongo.save_selected_warehouses(chat_id, [])
+            # Очищаем выбранные склады в БД
+            bot.mongo.save_selected_warehouses(user_id, [])
                 
             class FakeContext:
                 def __init__(self, chat_id, bot):
@@ -868,13 +862,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Логируем выбор склада
             bot.mongo.log_activity(user_id, f'warehouse_selected_{warehouse_id}')
             
-            if chat_id not in bot.warehouse_selection:
-                bot.warehouse_selection[chat_id] = set()
-            if chat_id not in bot.warehouse_selection_order:
-                bot.warehouse_selection_order[chat_id] = []
-            
-            bot.warehouse_selection[chat_id].add(warehouse_id)
-            bot.warehouse_selection_order[chat_id].append(warehouse_id)
+            # Получаем текущие склады из БД
+            current_warehouses = bot.mongo.get_selected_warehouses(chat_id)
+            # Добавляем новый склад
+            current_warehouses.append(warehouse_id)
+            # Сохраняем обновленный список в БД
+            bot.mongo.save_selected_warehouses(chat_id, current_warehouses)
             await bot.show_warehouse_selection(update, context)
             
         elif query.data.startswith('warehouse_page_'):
@@ -886,7 +879,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == 'remove_last_warehouse':
             try:
                 chat_id = update.effective_chat.id
-                if chat_id in bot.warehouse_selection and bot.warehouse_selection[chat_id]:
+                # Получаем текущие склады из БД
+                current_warehouses = bot.mongo.get_selected_warehouses(chat_id)
+                if current_warehouses:
                     # Логируем удаление последнего склада
                     bot.mongo.log_activity(user_id, 'remove_last_warehouse')
                     
@@ -896,20 +891,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         raise Exception("Не удалось получить список складов")
                     
                     # Удаляем последний добавленный склад
-                    if chat_id in bot.warehouse_selection_order and bot.warehouse_selection_order[chat_id]:
-                        removed_warehouse = bot.warehouse_selection_order[chat_id].pop()
-                        bot.warehouse_selection[chat_id].remove(removed_warehouse)
-                        
-                        removed_name = warehouses.get(removed_warehouse, 'Неизвестный склад')
-                        
-                        # Обновляем страницу с текущим списком складов
-                        await bot.show_warehouse_selection(update, context, 0)
-                        
-                        # Отправляем уведомление об удалении
-                        await context.bot.send_message(
-                            chat_id=chat_id,
-                            text=f"🗑 Удален склад: {removed_name}"
-                        )
+                    removed_warehouse = current_warehouses.pop()
+                    # Сохраняем обновленный список в БД
+                    bot.mongo.save_selected_warehouses(chat_id, current_warehouses)
+                    
+                    removed_name = warehouses.get(removed_warehouse, 'Неизвестный склад')
+                    
+                    # Обновляем страницу с текущим списком складов
+                    await bot.show_warehouse_selection(update, context, 0)
+                    
+                    # Отправляем уведомление об удалении
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"🗑 Удален склад: {removed_name}"
+                    )
             except Exception as e:
                 logger.critical(f"CRITICAL: Ошибка при удалении последнего склада: {str(e)}", exc_info=True)
                 await query.message.edit_text("❌ Произошла ошибка при удалении склада")
@@ -919,7 +914,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Логируем завершение выбора складов
             bot.mongo.log_activity(user_id, 'finish_warehouse_selection')
             
-            if chat_id in bot.warehouse_selection and bot.warehouse_selection[chat_id]:
+            # Получаем текущие склады из БД
+            current_warehouses = bot.mongo.get_selected_warehouses(chat_id)
+            if current_warehouses:
                 await bot.start_auto_coefficients(chat_id)
                 await query.message.edit_text(
                     f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_COEFFICIENTS_INTERVAL']} минут(ы) в рабочее время)"
