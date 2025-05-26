@@ -83,8 +83,16 @@ class WBStockBot:
             
             # Получаем время начала и конца рабочего дня
             working_hours = settings.get('working_hours', {})
-            working_hours_start = time(hour=working_hours.get('start', 9))
-            working_hours_end = time(hour=working_hours.get('end', 22))
+            working_hours_start = working_hours.get('start', 9)
+            working_hours_end = working_hours.get('end', 22)
+            
+            # Если start=0 и end=0, значит ограничений по времени нет
+            if working_hours_start == 0 and working_hours_end == 0:
+                logger.info(f"No working hours restrictions for user {user_id}")
+                return True
+            
+            working_hours_start = time(hour=working_hours_start)
+            working_hours_end = time(hour=working_hours_end)
             
             logger.info(f"Checking working hours for user {user_id}:")
             logger.info(f"Current time: {current_time}")
