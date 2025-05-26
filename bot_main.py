@@ -61,7 +61,7 @@ class WBStockBot:
 
     def load_saved_warehouses(self):
         """Загрузка сохраненных складов для всех пользователей"""
-        users = self.mongo.users.find({})
+        users = self.mongo.settings.find({'user_id': {'$exists': True}})
         for user in users:
             user_id = user['user_id']
             warehouses = self.mongo.get_selected_warehouses(user_id)
