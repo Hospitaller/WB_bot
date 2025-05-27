@@ -792,7 +792,7 @@ class WBStockBot:
             if context.user_data.get('waiting_for_token'):
                 token = update.message.text.strip()
                 self.user_data.add_user(user_id, token)
-                self.mongo.init_user(user_id, token)
+                self.mongo.init_user(user_id)
                 # Логируем добавление токена
                 self.mongo.log_activity(user_id, 'token_added')
                 context.user_data['waiting_for_token'] = False
@@ -837,8 +837,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Введите ваш токен:"
             )
             context.user_data['waiting_for_token'] = True
-            # Инициализируем пользователя в MongoDB с пустым токеном
-            bot.mongo.init_user(user_id, "")
+            # Инициализируем пользователя в MongoDB
+            bot.mongo.init_user(user_id)
             logger.info(f"User {user_id} initialized in MongoDB")
         else:
             logger.info(f"User {user_id} already exists")
