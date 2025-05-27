@@ -42,18 +42,27 @@ class MongoDB:
     def init_user(self, user_id: int):
         """Инициализация нового пользователя"""
         try:
+            # Получаем глобальные настройки
+            global_settings = self.settings.find_one({'_id': 'global'})
+            if not global_settings:
+                logger.error("Global settings not found in database")
+                raise Exception("Global settings not found in database")
+
+            # Копируем значения из глобальных настроек
+            default_settings = global_settings['default_settings']
+            
             user_data = {
                 'user_id': user_id,
                 'settings': {
-                    'intervals': {},
-                    'thresholds': {},
+                    'intervals': default_settings.get('intervals', {}),
+                    'thresholds': default_settings.get('thresholds', {}),
                     'warehouses': {
                         'target': [],
-                        'excluded': [],
+                        'excluded': default_settings.get('warehouses', {}).get('excluded', []),
                         'paused': [],
                         'disabled': []
                     },
-                    'working_hours': {},
+                    'working_hours': default_settings.get('working_hours', {}),
                     'auto_coefficients': False
                 },
                 'metadata': {
