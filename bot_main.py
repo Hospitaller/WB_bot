@@ -872,6 +872,36 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.edit_text("Выберите действие:", reply_markup=reply_markup)
             return
             
+        elif query.data == 'check_all_stock':
+            # Логируем запрос на проверку всех остатков
+            bot.mongo.log_activity(user_id, 'check_all_stock_requested')
+            class FakeContext:
+                def __init__(self, chat_id, bot):
+                    self._chat_id = chat_id
+                    self.bot = bot
+            fake_context = FakeContext(update.effective_chat.id, context.bot)
+            await bot.fetch_wb_data(fake_context)
+            
+        elif query.data == 'start_auto_stock':
+            try:
+                # Логируем запрос на запуск авто остатков
+                bot.mongo.log_activity(user_id, 'start_auto_stock_requested')
+                await bot.start_periodic_checks(update.effective_chat.id)
+                await query.message.edit_text(
+                    f"✅ Автоматические проверки запущены (каждые {CONFIG['CHECK_STOCK_INTERVAL']} минут(ы) в рабочее время)"
+                )
+            except Exception as e:
+                logger.critical(f"CRITICAL: Ошибка в start_auto_stock: {str(e)}", exc_info=True)
+                await query.message.edit_text("❌ Произошла ошибка при запуске автоматических проверок")
+                
+        elif query.data == 'stop_auto_stock':
+            # Логируем запрос на остановку авто остатков
+            bot.mongo.log_activity(user_id, 'stop_auto_stock_requested')
+            if await bot.stop_periodic_checks(update.effective_chat.id):
+                await query.message.edit_text("🛑 Автоматические проверки остановлены")
+            else:
+                await query.message.edit_text("ℹ️ Нет активных автоматических проверок")
+                
         elif query.data == 'check_all_coefficients':
             # Логируем запрос на проверку всех коэффициентов
             bot.mongo.log_activity(user_id, 'check_all_coefficients_requested')
@@ -1006,7 +1036,7 @@ def main():
     application.add_handler(CommandHandler("start", start))
     
     # Обработчики команд
-    async def check_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def check_all_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             bot = context.bot_data.get('wb_bot')
             if not bot:
@@ -1022,6 +1052,27 @@ def main():
                     self.bot = bot
             fake_context = FakeContext(update.effective_chat.id, context.bot)
             await bot.fetch_wb_data(fake_context)
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в check_all_stock: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ Произошла критическая ошибка")
+    
+    async def check_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            bot = context.bot_data.get('wb_bot')
+            if not bot:
+                raise Exception("Бот не инициализирован")
+            
+            user_id = update.effective_user.id
+            # Логируем запрос на проверку остатков
+            bot.mongo.log_activity(user_id, 'check_stock_menu_opened')
+
+            keyboard = [
+                [InlineKeyboardButton("Остатки на складах", callback_data='check_all_stock')],
+                [InlineKeyboardButton("Запустить авто остатки", callback_data='start_auto_stock')],
+                [InlineKeyboardButton("Остановить авто остатки", callback_data='stop_auto_stock')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text("Выберите действие:", reply_markup=reply_markup)
         except Exception as e:
             logger.critical(f"CRITICAL: Ошибка в check_stock: {str(e)}", exc_info=True)
             await update.message.reply_text("❌ Произошла критическая ошибка")
@@ -1085,6 +1136,7 @@ def main():
     
     # Регистрация обработчиков команд
     application.add_handler(CommandHandler("check_stock", check_stock))
+    application.add_handler(CommandHandler("check_all_stock", check_all_stock))
     application.add_handler(CommandHandler("start_auto_stock", start_auto_stock))
     application.add_handler(CommandHandler("stop_auto_stock", stop_auto_stock))
     application.add_handler(CommandHandler("check_coefficients", check_coefficients))
