@@ -70,9 +70,13 @@ class WBStockBot:
                 self.warehouse_selection_order[user_id] = warehouses
 
     # Проверка на рабочее время
-    def is_working_time(self, user_id: int):
+    def is_working_time(self, user_id: int, is_auto_check: bool = False):
         """Проверка на рабочее время"""
         try:
+            # Если это не автоматическая проверка, пропускаем проверку рабочего времени
+            if not is_auto_check:
+                return True
+                
             settings = self.mongo.get_user_settings(user_id)
             if not settings:
                 logger.error(f"No settings found for user {user_id} in is_working_time")
@@ -154,7 +158,7 @@ class WBStockBot:
     async def fetch_wb_data(self, context: ContextTypes.DEFAULT_TYPE):
         chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
         
-        if not self.is_working_time(chat_id):
+        if not self.is_working_time(chat_id, True):
             logger.info(f"Сейчас нерабочее время для чата {chat_id}")
             return
             
@@ -628,7 +632,7 @@ class WBStockBot:
             self.mongo.log_activity(chat_id, 'start_auto_coefficients')
             
             # Проверяем рабочее время
-            is_working = self.is_working_time(chat_id)
+            is_working = self.is_working_time(chat_id, True)
             logger.info(f"Working time check for user {chat_id}: {is_working}")
             
             return job
