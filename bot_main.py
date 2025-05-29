@@ -172,7 +172,7 @@ class WBStockBot:
             settings = self.mongo.get_user_settings(chat_id)
             timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                await context.bot.send_message(chat_id=chat_id, text="🔄 Считаю остатки...")
+                await context.bot.send_message(chat_id=chat_id, text="🔄 Считаю остатки..")
                 first_response = await self.make_api_request(session, settings['api']['urls']['stock_request'], headers, context, chat_id)
                 
                 if not first_response:
@@ -289,10 +289,42 @@ class WBStockBot:
                 logger.error(f"No settings found for user {chat_id} in get_warehouse_coefficients")
                 return
             
+            # Проверяем, нужно ли сбросить отключенные склады
+            warehouses = settings.get('warehouses', {})
+            paused_warehouses = warehouses.get('paused', [])
+            if paused_warehouses:
+                last_notification = self.mongo.get_last_notification(chat_id)
+                if last_notification:
+                    working_hours = settings.get('working_hours', {})
+                    next_day_start = datetime.combine(
+                        last_notification.date() + timedelta(days=1),
+                        time(hour=working_hours.get('start', 9))
+                    )
+                    if datetime.now(self.timezone) >= next_day_start:
+                        # Очищаем paused склады
+                        self.mongo.update_user_settings(chat_id, {
+                            'warehouses': {
+                                'paused': []
+                            }
+                        })
+                        logger.info(f"Reset paused warehouses for user {chat_id} as it's next day")
+                        # Обновляем настройки после сброса
+                        settings = self.mongo.get_user_settings(chat_id)
+            
             # Получаем токен пользователя
             wb_token = self.user_data.get_user_token(chat_id)
             if not wb_token:
                 await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден. Пожалуйста, добавьте токен через команду /start. Требуются права Статистика, Аналитика, Поставки")
+                return
+
+            # Проверяем, есть ли отключенные склады
+            warehouses = settings.get('warehouses', {})
+            paused_warehouses = warehouses.get('paused', [])
+            target_warehouses = warehouses.get('target', [])
+            
+            # Если все целевые склады отключены, пропускаем проверку
+            if target_warehouses and all(str(wh) in paused_warehouses for wh in target_warehouses):
+                logger.info(f"All target warehouses are paused for user {chat_id}, skipping check")
                 return
 
             headers = {
