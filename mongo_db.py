@@ -232,6 +232,17 @@ class MongoDB:
                         # Для warehouses обновляем только указанные подполя
                         for subkey, subvalue in value.items():
                             update_data[f'settings.warehouses.{subkey}'] = subvalue
+                            
+                            # Синхронизируем с коллекцией users
+                            if subkey in ['excluded', 'paused', 'disabled']:
+                                self.users.update_one(
+                                    {'user_id': user_id},
+                                    {
+                                        '$set': {
+                                            f'warehouses.{subkey}': subvalue
+                                        }
+                                    }
+                                )
                     else:
                         update_data[f'settings.{key}'] = value
             
