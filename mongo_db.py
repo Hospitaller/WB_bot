@@ -115,7 +115,7 @@ class MongoDB:
             logger.error(f"Failed to initialize user {user_id}: {str(e)}")
             raise
 
-    def update_user_activity(self, user_id: int):
+    def update_user_activity(self, user_id: int, telegram_user=None):
         """Обновление времени последней активности пользователя"""
         try:
             # Обновляем в коллекции settings
@@ -128,15 +128,73 @@ class MongoDB:
                 }
             )
             
-            # Обновляем в коллекции users
-            self.users.update_one(
-                {'user_id': user_id},
-                {
-                    '$set': {
+            # Проверяем существование пользователя в коллекции users
+            user = self.users.find_one({'user_id': user_id})
+            if not user:
+                # Получаем настройки пользователя
+                settings = self.settings.find_one({'user_id': user_id})
+                if settings:
+                    # Получаем данные пользователя из Telegram, если они доступны
+                    first_name = None
+                    last_name = None
+                    username = None
+                    
+                    if telegram_user:
+                        first_name = telegram_user.first_name
+                        last_name = telegram_user.last_name
+                        username = telegram_user.username
+                    
+                    # Создаем документ в users на основе данных из settings
+                    user_info = {
+                        'user_id': user_id,
+                        'first_name': first_name,
+                        'last_name': last_name,
+                        'username': username,
+                        'warehouses': settings.get('settings', {}).get('warehouses', {
+                            'target': [],
+                            'excluded': [],
+                            'paused': [],
+                            'disabled': []
+                        }),
+                        'auto_coefficients': settings.get('settings', {}).get('auto_coefficients', False),
+                        'subscription': {
+                            'level': 0,
+                            'start_date': None,
+                            'end_date': None
+                        },
                         'last_activity': datetime.utcnow()
                     }
-                }
-            )
+                    
+                    self.users.insert_one(user_info)
+                    logger.info(f"Created missing user document in users collection for user {user_id}")
+            else:
+                # Если есть данные пользователя из Telegram, обновляем их
+                if telegram_user:
+                    update_data = {}
+                    if telegram_user.first_name and (not user.get('first_name')):
+                        update_data['first_name'] = telegram_user.first_name
+                    if telegram_user.last_name and (not user.get('last_name')):
+                        update_data['last_name'] = telegram_user.last_name
+                    if telegram_user.username and (not user.get('username')):
+                        update_data['username'] = telegram_user.username
+                    
+                    if update_data:
+                        update_data['last_activity'] = datetime.utcnow()
+                        self.users.update_one(
+                            {'user_id': user_id},
+                            {'$set': update_data}
+                        )
+                        logger.info(f"Updated user info in users collection for user {user_id}: {update_data}")
+                else:
+                    # Просто обновляем время последней активности
+                    self.users.update_one(
+                        {'user_id': user_id},
+                        {
+                            '$set': {
+                                'last_activity': datetime.utcnow()
+                            }
+                        }
+                    )
             
             if result.modified_count > 0:
                 logger.info(f"Время последней активности обновлено для пользователя {user_id}")
