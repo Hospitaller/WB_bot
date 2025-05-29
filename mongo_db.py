@@ -234,7 +234,7 @@ class MongoDB:
                             update_data[f'settings.warehouses.{subkey}'] = subvalue
                             
                             # Синхронизируем с коллекцией users
-                            if subkey in ['excluded', 'paused', 'disabled']:
+                            if subkey in ['excluded', 'paused', 'disabled', 'target']:
                                 self.users.update_one(
                                     {'user_id': user_id},
                                     {
@@ -243,6 +243,7 @@ class MongoDB:
                                         }
                                     }
                                 )
+                                logger.info(f"Synced warehouses.{subkey} with users collection for user {user_id}: {subvalue}")
                     else:
                         update_data[f'settings.{key}'] = value
             
