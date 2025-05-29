@@ -2,6 +2,7 @@ from pymongo import MongoClient
 from datetime import datetime
 import logging
 from config import CONFIG
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,11 @@ class MongoDB:
     def update_user_activity(self, user_id: int, telegram_user=None):
         """Обновление времени последней активности пользователя"""
         try:
+            # Получаем текущее время в МСК
+            moscow_tz = pytz.timezone('Europe/Moscow')
+            current_time = datetime.now(moscow_tz)
+            formatted_time = current_time.strftime('%d-%m-%y %H:%M')
+            
             # Обновляем в коллекции settings
             result = self.settings.update_one(
                 {'user_id': user_id},
@@ -162,7 +168,7 @@ class MongoDB:
                             'start_date': None,
                             'end_date': None
                         },
-                        'last_activity': datetime.utcnow()
+                        'last_activity': formatted_time
                     }
                     
                     self.users.insert_one(user_info)
@@ -174,7 +180,7 @@ class MongoDB:
                         'first_name': telegram_user.first_name,
                         'last_name': telegram_user.last_name,
                         'username': telegram_user.username,
-                        'last_activity': datetime.utcnow()
+                        'last_activity': formatted_time
                     }
                     
                     self.users.update_one(
@@ -188,7 +194,7 @@ class MongoDB:
                         {'user_id': user_id},
                         {
                             '$set': {
-                                'last_activity': datetime.utcnow()
+                                'last_activity': formatted_time
                             }
                         }
                     )
