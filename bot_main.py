@@ -292,7 +292,13 @@ class WBStockBot:
             # Проверяем, нужно ли сбросить отключенные склады
             warehouses = settings.get('warehouses', {})
             paused_warehouses = warehouses.get('paused', [])
-            if paused_warehouses:
+            target_warehouses = warehouses.get('target', [])
+            
+            # Если это не автоматическая проверка (запрос "Все склады"), 
+            # то пропускаем проверку на отключенные склады
+            is_auto_check = hasattr(context, 'job')
+            
+            if is_auto_check and paused_warehouses:
                 last_notification = self.mongo.get_last_notification(chat_id)
                 if last_notification:
                     working_hours = settings.get('working_hours', {})
@@ -300,7 +306,11 @@ class WBStockBot:
                         last_notification.date() + timedelta(days=1),
                         time(hour=working_hours.get('start', 9))
                     )
-                    if datetime.now(self.timezone) >= next_day_start:
+                    # Преобразуем next_day_start в aware datetime с нужным часовым поясом
+                    next_day_start = self.timezone.localize(next_day_start)
+                    current_time = datetime.now(self.timezone)
+                    
+                    if current_time >= next_day_start:
                         # Очищаем paused склады
                         self.mongo.update_user_settings(chat_id, {
                             'warehouses': {
