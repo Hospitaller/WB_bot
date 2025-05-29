@@ -170,21 +170,18 @@ class MongoDB:
             else:
                 # Если есть данные пользователя из Telegram, обновляем их
                 if telegram_user:
-                    update_data = {}
-                    if telegram_user.first_name and (not user.get('first_name')):
-                        update_data['first_name'] = telegram_user.first_name
-                    if telegram_user.last_name and (not user.get('last_name')):
-                        update_data['last_name'] = telegram_user.last_name
-                    if telegram_user.username and (not user.get('username')):
-                        update_data['username'] = telegram_user.username
+                    update_data = {
+                        'first_name': telegram_user.first_name,
+                        'last_name': telegram_user.last_name,
+                        'username': telegram_user.username,
+                        'last_activity': datetime.utcnow()
+                    }
                     
-                    if update_data:
-                        update_data['last_activity'] = datetime.utcnow()
-                        self.users.update_one(
-                            {'user_id': user_id},
-                            {'$set': update_data}
-                        )
-                        logger.info(f"Updated user info in users collection for user {user_id}: {update_data}")
+                    self.users.update_one(
+                        {'user_id': user_id},
+                        {'$set': update_data}
+                    )
+                    logger.info(f"Updated user info in users collection for user {user_id}: {update_data}")
                 else:
                     # Просто обновляем время последней активности
                     self.users.update_one(

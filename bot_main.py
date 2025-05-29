@@ -835,7 +835,8 @@ class WBStockBot:
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             user_id = update.effective_user.id
-            self.mongo.update_user_activity(user_id)
+            # Передаем telegram_user при обновлении активности
+            self.mongo.update_user_activity(user_id, update.effective_user)
             
             if context.user_data.get('waiting_for_token'):
                 token = update.message.text.strip()
@@ -894,7 +895,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.info(f"User {user_id} initialized in MongoDB")
         else:
             # Обновляем информацию о пользователе
-            bot.mongo.update_user_activity(user_id)
+            bot.mongo.update_user_activity(user_id, update.effective_user)
             logger.info(f"User {user_id} already exists")
             await update.message.reply_text(
                 "Для управления ботом используйте главное меню"
@@ -913,6 +914,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise Exception("Бот не инициализирован")
         
         user_id = update.effective_user.id
+        # Обновляем информацию о пользователе при каждом взаимодействии
+        bot.mongo.update_user_activity(user_id, update.effective_user)
         
         if query.data == 'check_coefficients':
             # Логируем открытие меню коэффициентов
