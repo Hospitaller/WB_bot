@@ -158,7 +158,9 @@ class WBStockBot:
     async def fetch_wb_data(self, context: ContextTypes.DEFAULT_TYPE):
         chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
         
-        if not self.is_working_time(chat_id, True):
+        # Проверяем рабочее время только для автоматических проверок
+        is_auto_check = hasattr(context, 'job')
+        if is_auto_check and not self.is_working_time(chat_id, True):
             logger.info(f"Сейчас нерабочее время для чата {chat_id}")
             return
             
