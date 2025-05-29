@@ -863,6 +863,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise Exception("Бот не инициализирован")
 
         user_id = update.effective_user.id
+        first_name = update.effective_user.first_name
+        last_name = update.effective_user.last_name
+        username = update.effective_user.username
+        
         logger.info(f"Start command received from user {user_id}")
         
         # Логируем начало взаимодействия до проверки существования пользователя
@@ -880,9 +884,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             context.user_data['waiting_for_token'] = True
             # Инициализируем пользователя в MongoDB
-            bot.mongo.init_user(user_id)
+            bot.mongo.init_user(user_id, first_name, username, last_name)
             logger.info(f"User {user_id} initialized in MongoDB")
         else:
+            # Обновляем информацию о пользователе
+            bot.mongo.update_user_activity(user_id)
             logger.info(f"User {user_id} already exists")
             await update.message.reply_text(
                 "Для управления ботом используйте главное меню"

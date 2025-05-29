@@ -15,6 +15,7 @@ class MongoDB:
             # Получаем ссылки на коллекции
             self.settings = self.db.settings
             self.logs = self.db.logs
+            self.users = self.db.users  # Новая коллекция users
             
             # Создаем индексы
             self.create_indexes()
@@ -26,6 +27,8 @@ class MongoDB:
     def create_indexes(self):
         """Создание индексов для оптимизации запросов"""
         self.settings.create_index('user_id', unique=True)
+        self.logs.create_index([('user_id', 1), ('timestamp', -1)])
+        self.users.create_index('user_id', unique=True)  # Индекс для users
 
     def get_global_settings(self):
         """Получение глобальных настроек"""
@@ -39,7 +42,7 @@ class MongoDB:
             logger.error(f"Failed to get global settings: {str(e)}")
             raise
 
-    def init_user(self, user_id: int):
+    def init_user(self, user_id: int, first_name: str = None, username: str = None, last_name: str = None):
         """Инициализация нового пользователя"""
         try:
             # Получаем глобальные настройки
@@ -51,6 +54,7 @@ class MongoDB:
             # Копируем значения из глобальных настроек
             default_settings = global_settings['default_settings']
             
+            # Создаем запись в коллекции settings
             user_data = {
                 'user_id': user_id,
                 'settings': {
@@ -78,6 +82,35 @@ class MongoDB:
                 upsert=True
             )
             logger.info(f"User {user_id} initialized with default settings")
+
+            # Создаем запись в коллекции users
+            user_info = {
+                'user_id': user_id,
+                'first_name': first_name,
+                'last_name': last_name,
+                'username': username,
+                'warehouses': {
+                    'target': [],
+                    'excluded': default_settings.get('warehouses', {}).get('excluded', []),
+                    'paused': [],
+                    'disabled': []
+                },
+                'auto_coefficients': False,
+                'subscription': {
+                    'level': 0,
+                    'start_date': None,
+                    'end_date': None
+                },
+                'last_activity': datetime.utcnow()
+            }
+            
+            self.users.update_one(
+                {'user_id': user_id},
+                {'$setOnInsert': user_info},
+                upsert=True
+            )
+            logger.info(f"User {user_id} info saved in users collection")
+            
         except Exception as e:
             logger.error(f"Failed to initialize user {user_id}: {str(e)}")
             raise
@@ -85,11 +118,22 @@ class MongoDB:
     def update_user_activity(self, user_id: int):
         """Обновление времени последней активности пользователя"""
         try:
+            # Обновляем в коллекции settings
             result = self.settings.update_one(
                 {'user_id': user_id},
                 {
                     '$set': {
                         'metadata.updated': datetime.utcnow()
+                    }
+                }
+            )
+            
+            # Обновляем в коллекции users
+            self.users.update_one(
+                {'user_id': user_id},
+                {
+                    '$set': {
+                        'last_activity': datetime.utcnow()
                     }
                 }
             )
@@ -108,6 +152,7 @@ class MongoDB:
     def update_auto_coefficients(self, user_id: int, status: bool):
         """Обновление статуса автоматического отслеживания коэффициентов"""
         try:
+            # Обновляем в коллекции settings
             self.settings.update_one(
                 {'user_id': user_id},
                 {
@@ -117,6 +162,17 @@ class MongoDB:
                     }
                 }
             )
+            
+            # Обновляем в коллекции users
+            self.users.update_one(
+                {'user_id': user_id},
+                {
+                    '$set': {
+                        'auto_coefficients': status
+                    }
+                }
+            )
+            
             logger.info(f"Updated auto_coefficients status for user {user_id}: {status}")
         except Exception as e:
             logger.error(f"Failed to update auto_coefficients status for {user_id}: {str(e)}")
@@ -193,12 +249,23 @@ class MongoDB:
     def save_selected_warehouses(self, user_id: int, warehouses: list):
         """Сохранение выбранных складов пользователя"""
         try:
+            # Обновляем в коллекции settings
             result = self.settings.update_one(
                 {'user_id': user_id},
                 {
                     '$set': {
                         'settings.warehouses.target': warehouses,
                         'metadata.updated': datetime.utcnow()
+                    }
+                }
+            )
+            
+            # Обновляем в коллекции users
+            self.users.update_one(
+                {'user_id': user_id},
+                {
+                    '$set': {
+                        'warehouses.target': warehouses
                     }
                 }
             )
