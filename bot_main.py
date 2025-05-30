@@ -483,11 +483,14 @@ class WBStockBot:
                         base_cost = data.get('base_cost', 0)
                         liter_cost = data.get('liter_cost', 0)
                         if 0 <= tariff <= 130:
-                            new_line += f"Коэфф. склада: `{data['tariff']}% / {base_cost} руб.+ {liter_cost} доп.л` ✅\n"
+                            new_line += f"Кф. склада: `{data['tariff']}% / {base_cost} руб.+ {liter_cost} доп.л` ✅\n"
+                            new_line += f"Логистика: `{base_cost} руб.+ {liter_cost} доп.л`\n"
                         elif 131 <= tariff <= 150:
-                            new_line += f"Коэфф. склада: `{data['tariff']}% / {base_cost} руб.+ {liter_cost} доп.л` ⚠️\n"
+                            new_line += f"Кф. склада: `{data['tariff']}% / {base_cost} руб.+ {liter_cost} доп.л` ⚠️\n"
+                            new_line += f"Логистика: `{base_cost} руб.+ {liter_cost} доп.л`\n"
                         else:
-                            new_line += f"Коэфф. склада: `{data['tariff']}% / {base_cost} руб.+ {liter_cost} доп.л` ❌\n"
+                            new_line += f"Кф. склада: `{data['tariff']}% / {base_cost} руб.+ {liter_cost} доп.л` ❌\n"
+                            new_line += f"Логистика: `{base_cost} руб.+ {liter_cost} доп.л`\n"
                     for item in data['dates']:
                         new_line += f"--- {item['date']} = {item['coefficient']}\n"
                     new_line += "\n"
