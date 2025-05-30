@@ -439,6 +439,9 @@ class WBStockBot:
                         if warehouse_name == "Самара (Новосемейкино)":
                             if "Новосемейкино" in filtered_data:
                                 filtered_data["Новосемейкино"]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
+                        elif warehouse_name == "Краснодар":
+                            if "Краснодар (Тихорецкая)" in filtered_data:
+                                filtered_data["Краснодар (Тихорецкая)"]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
                         elif warehouse_name in filtered_data:
                             filtered_data[warehouse_name]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
                 
