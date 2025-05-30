@@ -435,7 +435,11 @@ class WBStockBot:
                 if tariffs_data and 'warehouseList' in tariffs_data:
                     for warehouse in tariffs_data['warehouseList']:
                         warehouse_name = warehouse.get('warehouseName')
-                        if warehouse_name in filtered_data:
+                        # Специальный случай для Новосемейкино
+                        if warehouse_name == "Самара (Новосемейкино)":
+                            if "Новосемейкино" in filtered_data:
+                                filtered_data["Новосемейкино"]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
+                        elif warehouse_name in filtered_data:
                             filtered_data[warehouse_name]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
                 
                 # Сортируем данные по дате для каждого склада
