@@ -30,20 +30,14 @@ logging.basicConfig(
     ]
 )
 
+logger = logging.getLogger(__name__)
+
 # Настройка логгера для фильтрации
 filter_logger = logging.getLogger('filter_logger')
 filter_logger.setLevel(logging.INFO)
 filter_handler = logging.FileHandler('logs/filter.log', encoding='utf-8')
 filter_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 filter_logger.addHandler(filter_handler)
-
-logger = logging.getLogger(__name__)
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-logger = logging.getLogger(__name__)
-logger.addHandler(console_handler)
 
 # Класс бота
 class WBStockBot:
