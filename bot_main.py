@@ -470,7 +470,7 @@ class WBStockBot:
                     new_line = f"*{warehouse_name}*:\n"
                     if data['tariff']:
                         tariff = int(data['tariff'])
-                        if 0 <= tariff <= 130
+                        if 0 <= tariff <= 130:
                             new_line += f"Коэфф. склада: `{data['tariff']} %` ✅\n"
                         elif 131 <= tariff <= 150:
                             new_line += f"Коэфф. склада: `{data['tariff']} %` ⚠️\n"
