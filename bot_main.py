@@ -469,7 +469,13 @@ class WBStockBot:
                     has_data = True
                     new_line = f"*{warehouse_name}*:\n"
                     if data['tariff']:
-                        new_line += f"Коэфф. склада: {data['tariff']} %\n"
+                        tariff = int(data['tariff'])
+                        if 0 <= tariff <= 100:
+                            new_line += f"Коэфф. склада: <code style='color: green'>{data['tariff']} %</code>\n"
+                        elif 101 <= tariff <= 150:
+                            new_line += f"Коэфф. склада: <code style='color: yellow'>{data['tariff']} %</code>\n"
+                        else:
+                            new_line += f"Коэфф. склада: <code style='color: red'>{data['tariff']} %</code>\n"
                     for item in data['dates']:
                         new_line += f"--- {item['date']} = {item['coefficient']}\n"
                     new_line += "\n"
