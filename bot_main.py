@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from user_data import UserData
 from config import CONFIG
 from mongo_db import MongoDB
+import telegram
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -775,7 +776,13 @@ class WBStockBot:
 
     async def handle_warehouse_selection(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
-        await query.answer()
+        try:
+            await query.answer()
+        except telegram.error.BadRequest as e:
+            if "Query is too old" in str(e) or "query id is invalid" in str(e):
+                logger.warning(f"Callback query is too old or invalid: {str(e)}")
+            else:
+                raise e
         
         chat_id = update.effective_chat.id
         
@@ -906,7 +913,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обработчик нажатий на кнопки
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except telegram.error.BadRequest as e:
+        if "Query is too old" in str(e) or "query id is invalid" in str(e):
+            logger.warning(f"Callback query is too old or invalid: {str(e)}")
+        else:
+            raise e
     
     try:
         bot = context.bot_data.get('wb_bot')
