@@ -420,7 +420,9 @@ class WBStockBot:
                             if warehouse_name not in filtered_data:
                                 filtered_data[warehouse_name] = {
                                     'dates': [],
-                                    'tariff': None
+                                    'tariff': None,
+                                    'base_cost': None,
+                                    'liter_cost': None
                                 }
                             
                             filtered_data[warehouse_name]['dates'].append({
@@ -435,15 +437,23 @@ class WBStockBot:
                 if tariffs_data and 'warehouseList' in tariffs_data:
                     for warehouse in tariffs_data['warehouseList']:
                         warehouse_name = warehouse.get('warehouseName')
+                        base_cost = warehouse.get('boxDeliveryBase', 0)
+                        liter_cost = warehouse.get('boxDeliveryLiter', 0)
                         # Специальный случай для Новосемейкино
                         if warehouse_name == "Самара (Новосемейкино)":
                             if "Новосемейкино" in filtered_data:
                                 filtered_data["Новосемейкино"]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
+                                filtered_data["Новосемейкино"]['base_cost'] = base_cost
+                                filtered_data["Новосемейкино"]['liter_cost'] = liter_cost
                         elif warehouse_name == "Краснодар":
                             if "Краснодар (Тихорецкая)" in filtered_data:
                                 filtered_data["Краснодар (Тихорецкая)"]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
+                                filtered_data["Краснодар (Тихорецкая)"]['base_cost'] = base_cost
+                                filtered_data["Краснодар (Тихорецкая)"]['liter_cost'] = liter_cost
                         elif warehouse_name in filtered_data:
                             filtered_data[warehouse_name]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
+                            filtered_data[warehouse_name]['base_cost'] = base_cost
+                            filtered_data[warehouse_name]['liter_cost'] = liter_cost
                 
                 # Сортируем данные по дате для каждого склада
                 for warehouse in filtered_data:
@@ -470,12 +480,14 @@ class WBStockBot:
                     new_line = f"*{warehouse_name}*:\n"
                     if data['tariff']:
                         tariff = int(data['tariff'])
+                        base_cost = data.get('base_cost', 0)
+                        liter_cost = data.get('liter_cost', 0)
                         if 0 <= tariff <= 130:
-                            new_line += f"Коэфф. склада: `{data['tariff']} %` ✅\n"
+                            new_line += f"Коэфф. склада: `{data['tariff']}% / {base_cost} руб.+ {liter_cost} доп.л` ✅\n"
                         elif 131 <= tariff <= 150:
-                            new_line += f"Коэфф. склада: `{data['tariff']} %` ⚠️\n"
+                            new_line += f"Коэфф. склада: `{data['tariff']}% / {base_cost} руб.+ {liter_cost} доп.л` ⚠️\n"
                         else:
-                            new_line += f"Коэфф. склада: `{data['tariff']} %` ❌\n"
+                            new_line += f"Коэфф. склада: `{data['tariff']}% / {base_cost} руб.+ {liter_cost} доп.л` ❌\n"
                     for item in data['dates']:
                         new_line += f"--- {item['date']} = {item['coefficient']}\n"
                     new_line += "\n"
