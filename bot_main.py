@@ -466,7 +466,7 @@ class WBStockBot:
                     has_data = True
                     new_line = f"*{warehouse_name}*:\n"
                     if data['tariff']:
-                        new_line += f"Коэффициент склада: {data['tariff']} %\n"
+                        new_line += f"Коэфф. склада: {data['tariff']} %\n"
                     for item in data['dates']:
                         new_line += f"--- {item['date']} = {item['coefficient']}\n"
                     new_line += "\n"
