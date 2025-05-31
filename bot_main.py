@@ -1307,11 +1307,14 @@ def main():
             
             # Получаем уровень подписки
             subscription_level = bot.mongo.get_subscription_level(user_id)
+             # Получаем дату окончания подписки
+            subscription_end_date = bot.mongo.get_subscription_end_date(user_id)
             
             # Формируем сообщение
             message = (
                 f"Ваш user ID: {user_id}\n"
-                f"Статус: {subscription_level}"
+                f"Статус: {subscription_level}\n"
+                f"Дата окончания подписки: {subscription_end_date}"
             )
             
             await update.message.reply_text(message)
