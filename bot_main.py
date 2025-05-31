@@ -1295,12 +1295,38 @@ def main():
             logger.critical(f"CRITICAL: Ошибка в check_coefficients: {str(e)}", exc_info=True)
             await update.message.reply_text("❌ Произошла критическая ошибка")
     
+    async def user_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            bot = context.bot_data.get('wb_bot')
+            if not bot:
+                raise Exception("Бот не инициализирован")
+            
+            user_id = update.effective_user.id
+            # Обновляем информацию о пользователе
+            bot.mongo.update_user_activity(user_id, update.effective_user)
+            
+            # Получаем уровень подписки
+            subscription_level = bot.mongo.get_subscription_level(user_id)
+            
+            # Формируем сообщение
+            message = (
+                f"Ваш user ID: {user_id}\n"
+                f"Статус: {subscription_level}"
+            )
+            
+            await update.message.reply_text(message)
+            
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в user_account: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ Произошла критическая ошибка")
+    
     # Регистрация обработчиков команд
     application.add_handler(CommandHandler("check_stock", check_stock))
     application.add_handler(CommandHandler("check_all_stock", check_all_stock))
     application.add_handler(CommandHandler("start_auto_stock", start_auto_stock))
     application.add_handler(CommandHandler("stop_auto_stock", stop_auto_stock))
     application.add_handler(CommandHandler("check_coefficients", check_coefficients))
+    application.add_handler(CommandHandler("user_account", user_account))
     
     # Регистрация обработчиков callback-запросов
     application.add_handler(CallbackQueryHandler(button_handler))
