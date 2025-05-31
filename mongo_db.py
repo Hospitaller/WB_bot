@@ -509,4 +509,23 @@ class MongoDB:
             
         except Exception as e:
             logger.error(f"Ошибка при получении уровня подписки для пользователя {user_id}: {str(e)}")
-            return "Base" 
+            return "Base"
+
+    def get_subscription_end_date(self, user_id: int) -> str:
+        """Получение даты окончания подписки пользователя"""
+        try:
+            user = self.users.find_one({'user_id': user_id})
+            if not user:
+                return "Нет данных"
+            
+            subscription = user.get('subscription', {})
+            end_date = subscription.get('end_date')
+            
+            if not end_date:
+                return "Нет данных"
+                
+            return end_date
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении даты окончания подписки для пользователя {user_id}: {str(e)}")
+            return "Ошибка получения данных" 
