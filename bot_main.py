@@ -349,9 +349,11 @@ class WBStockBot:
                 if not hasattr(context, 'job'):
                     await context.bot.send_message(chat_id=chat_id, text="🔄 Получаю коэффициенты складов...")
                 
-                response = await self.make_api_request(session, settings['api']['urls']['coefficients'], headers, context, chat_id)
+                # Получаем коэффициенты и тарифы параллельно
+                coefficients_response = await self.make_api_request(session, settings['api']['urls']['coefficients'], headers, context, chat_id)
+                tariffs_data = await self.get_warehouse_tariffs(context, chat_id)
                 
-                if not response or not isinstance(response, list):
+                if not coefficients_response or not isinstance(coefficients_response, list):
                     await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить данные о коэффициентах")
                     return
                 
@@ -367,7 +369,7 @@ class WBStockBot:
                 # Фильтруем и группируем данные
                 filtered_data = {}
                 
-                for item in response:
+                for item in coefficients_response:
                     warehouse_id = None
                     try:
                         warehouse_id = item.get('warehouseID')
@@ -411,9 +413,14 @@ class WBStockBot:
                                 formatted_date = date
                             
                             if warehouse_name not in filtered_data:
-                                filtered_data[warehouse_name] = []
+                                filtered_data[warehouse_name] = {
+                                    'dates': [],
+                                    'tariff': None,
+                                    'base_cost': None,
+                                    'liter_cost': None
+                                }
                             
-                            filtered_data[warehouse_name].append({
+                            filtered_data[warehouse_name]['dates'].append({
                                 'date': formatted_date,
                                 'coefficient': coefficient
                             })
@@ -421,9 +428,31 @@ class WBStockBot:
                     except (ValueError, TypeError):
                         continue
                 
+                # Добавляем информацию о тарифах
+                if tariffs_data and 'warehouseList' in tariffs_data:
+                    for warehouse in tariffs_data['warehouseList']:
+                        warehouse_name = warehouse.get('warehouseName')
+                        base_cost = warehouse.get('boxDeliveryBase', 0)
+                        liter_cost = warehouse.get('boxDeliveryLiter', 0)
+                        # Специальный случай для Новосемейкино
+                        if warehouse_name == "Самара (Новосемейкино)":
+                            if "Новосемейкино" in filtered_data:
+                                filtered_data["Новосемейкино"]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
+                                filtered_data["Новосемейкино"]['base_cost'] = base_cost
+                                filtered_data["Новосемейкино"]['liter_cost'] = liter_cost
+                        elif warehouse_name == "Краснодар":
+                            if "Краснодар (Тихорецкая)" in filtered_data:
+                                filtered_data["Краснодар (Тихорецкая)"]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
+                                filtered_data["Краснодар (Тихорецкая)"]['base_cost'] = base_cost
+                                filtered_data["Краснодар (Тихорецкая)"]['liter_cost'] = liter_cost
+                        elif warehouse_name in filtered_data:
+                            filtered_data[warehouse_name]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
+                            filtered_data[warehouse_name]['base_cost'] = base_cost
+                            filtered_data[warehouse_name]['liter_cost'] = liter_cost
+                
                 # Сортируем данные по дате для каждого склада
                 for warehouse in filtered_data:
-                    filtered_data[warehouse].sort(key=lambda x: datetime.strptime(x['date'], '%d.%m.%Y'))
+                    filtered_data[warehouse]['dates'].sort(key=lambda x: datetime.strptime(x['date'], '%d.%m.%Y'))
                 
                 # Формируем сообщение
                 MAX_MESSAGE_LENGTH = 3500  # Уменьшаем лимит для надежности
@@ -439,12 +468,25 @@ class WBStockBot:
                 # Формируем все сообщения заранее
                 messages = []
                 has_data = False
-                for warehouse_name, dates in filtered_data.items():
-                    if not dates:  # Пропускаем склады без данных
+                for warehouse_name, data in filtered_data.items():
+                    if not data['dates']:  # Пропускаем склады без данных
                         continue
                     has_data = True
                     new_line = f"*{warehouse_name}*:\n"
-                    for item in dates:
+                    if data['tariff']:
+                        tariff = int(data['tariff'])
+                        base_cost = data.get('base_cost', 0)
+                        liter_cost = data.get('liter_cost', 0)
+                        if 0 <= tariff <= 130:
+                            new_line += f"Кф. склада: `{data['tariff']}%` ✅\n"
+                            new_line += f"Логистика: `{base_cost} руб.+ {liter_cost} доп.л`\n"
+                        elif 131 <= tariff <= 150:
+                            new_line += f"Кф. склада: `{data['tariff']}%` ⚠️\n"
+                            new_line += f"Логистика: `{base_cost} руб.+ {liter_cost} доп.л`\n"
+                        else:
+                            new_line += f"Кф. склада: `{data['tariff']}%` ❌\n"
+                            new_line += f"Логистика: `{base_cost} руб.+ {liter_cost} доп.л`\n"
+                    for item in data['dates']:
                         new_line += f"--- {item['date']} = {item['coefficient']}\n"
                     new_line += "\n"
                     
@@ -862,6 +904,42 @@ class WBStockBot:
         except Exception as e:
             logger.critical(f"CRITICAL: Ошибка в обработчике сообщений: {str(e)}", exc_info=True)
             await update.message.reply_text("❌ Произошла критическая ошибка")
+
+    async def get_warehouse_tariffs(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int = None):
+        """Получение тарифов складов"""
+        try:
+            if chat_id is None:
+                if hasattr(context, 'job') and context.job:
+                    chat_id = context.job.chat_id
+                elif hasattr(context, '_chat_id'):
+                    chat_id = context._chat_id
+                else:
+                    return None
+
+            wb_token = self.user_data.get_user_token(chat_id)
+            if not wb_token:
+                return None
+
+            headers = {
+                'Accept': 'application/json',
+                'Authorization': wb_token
+            }
+            
+            settings = self.mongo.get_user_settings(chat_id)
+            # Формируем текущую дату в нужном формате
+            current_date = datetime.now().strftime('%Y-%m-%d')
+            url = settings['api']['urls']['warehouse_tariffs'].format(date_now=current_date)
+            
+            async with aiohttp.ClientSession() as session:
+                response = await self.make_api_request(session, url, headers, context, chat_id)
+                
+                if not response or 'response' not in response or 'data' not in response['response']:
+                    return None
+                
+                return response['response']['data']
+        except Exception as e:
+            logger.critical(f"CRITICAL ERROR getting warehouse tariffs for chat {chat_id}: {str(e)}", exc_info=True)
+            return None
 
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
