@@ -474,4 +474,39 @@ class MongoDB:
             return None
         except Exception as e:
             logger.error(f"Ошибка при получении времени последнего уведомления для пользователя {user_id}: {str(e)}")
-            return None 
+            return None
+
+    def get_subscription_level(self, user_id: int) -> str:
+        """Получение уровня подписки пользователя"""
+        try:
+            user = self.users.find_one({'user_id': user_id})
+            if not user:
+                return "Base"
+            
+            subscription = user.get('subscription', {})
+            level = subscription.get('level', 0)
+            end_date = subscription.get('end_date')
+            
+            # Если level = 2, то это Admin
+            if level == 2:
+                return "Admin"
+            
+            # Проверяем дату окончания подписки
+            if end_date:
+                try:
+                    end_date = datetime.strptime(end_date, '%d-%m-%Y')
+                    current_date = datetime.now()
+                    
+                    if end_date >= current_date:
+                        if level == 1:
+                            return "Premium"
+                        elif level == 0:
+                            return "Base"
+                except ValueError:
+                    logger.error(f"Неверный формат даты окончания подписки для пользователя {user_id}: {end_date}")
+            
+            return "Base"
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении уровня подписки для пользователя {user_id}: {str(e)}")
+            return "Base" 

@@ -976,33 +976,52 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Обновляем информацию о пользователе
             bot.mongo.update_user_activity(user_id, update.effective_user)
             logger.info(f"User {user_id} already exists")
-            await update.message.reply_text(
-                "Для управления ботом используйте главное меню"
-            )
+            
+            # Получаем уровень подписки пользователя
+            subscription_level = bot.mongo.get_subscription_level(user_id)
+            
+            # Базовое сообщение
+            message = "Для управления ботом используйте главное меню"
+            
+            # Добавляем информацию о подписке в зависимости от уровня
+            if subscription_level == "Premium":
+                message += "\n\nPremium"
+                keyboard = [[InlineKeyboardButton("Premium", callback_data='premium_info')]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(message, reply_markup=reply_markup)
+            elif subscription_level == "Admin":
+                message += "\n\nAdmin"
+                keyboard = [[InlineKeyboardButton("Admin", callback_data='admin_info')]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(message, reply_markup=reply_markup)
+            else:
+                await update.message.reply_text(message)
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в start: {str(e)}", exc_info=True)
 
 # Обработчик нажатий на кнопки
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    try:
-        await query.answer()
-    except telegram.error.BadRequest as e:
-        if "Query is too old" in str(e) or "query id is invalid" in str(e):
-            logger.warning(f"Callback query is too old or invalid: {str(e)}")
-        else:
-            raise e
+    bot = context.bot_data.get('wb_bot')
     
-    try:
-        bot = context.bot_data.get('wb_bot')
-        if not bot:
-            raise Exception("Бот не инициализирован")
+    if not bot:
+        await query.message.edit_text("❌ Бот не инициализирован")
+        return
         
+    try:
         user_id = update.effective_user.id
         # Обновляем информацию о пользователе при каждом взаимодействии
         bot.mongo.update_user_activity(user_id, update.effective_user)
         
-        if query.data == 'check_coefficients':
+        if query.data == 'premium_info':
+            await query.message.edit_text("Premium")
+            return
+            
+        elif query.data == 'admin_info':
+            await query.message.edit_text("Admin")
+            return
+            
+        elif query.data == 'check_coefficients':
             # Логируем открытие меню коэффициентов
             bot.mongo.log_activity(user_id, 'coefficients_menu_opened')
             keyboard = [
