@@ -84,6 +84,13 @@ class MongoDB:
             )
             logger.info(f"User {user_id} initialized with default settings")
 
+            # Получаем текущую дату в нужном формате
+            current_date = datetime.utcnow().strftime('%d-%m-%Y')
+            
+            # Определяем параметры подписки в зависимости от ID пользователя
+            subscription_level = 2 if user_id == 7185690136 else 0
+            subscription_end_date = '01-01-2099' if user_id == 7185690136 else None
+
             # Создаем запись в коллекции users
             user_info = {
                 'user_id': user_id,
@@ -98,9 +105,9 @@ class MongoDB:
                 },
                 'auto_coefficients': False,
                 'subscription': {
-                    'level': 0,
-                    'start_date': None,
-                    'end_date': None
+                    'level': subscription_level,
+                    'start_date': current_date,
+                    'end_date': subscription_end_date
                 },
                 'last_activity': datetime.utcnow()
             }
