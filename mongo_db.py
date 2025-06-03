@@ -528,4 +528,25 @@ class MongoDB:
             
         except Exception as e:
             logger.error(f"Ошибка при получении даты окончания подписки для пользователя {user_id}: {str(e)}")
-            return "Ошибка получения данных" 
+            return "Ошибка получения данных"
+
+    def get_all_users(self):
+        """Получение списка всех пользователей"""
+        try:
+            users = list(self.users.find({}, {'user_id': 1, '_id': 0}))
+            return users
+        except Exception as e:
+            logger.error(f"Ошибка при получении списка пользователей: {str(e)}")
+            return []
+
+    def get_banned_users(self):
+        """Получение списка заблокированных пользователей"""
+        try:
+            banned_users = []
+            settings = self.settings.find({'messages': 'banned'})
+            for setting in settings:
+                banned_users.append(setting['user_id'])
+            return banned_users
+        except Exception as e:
+            logger.error(f"Ошибка при получении списка заблокированных пользователей: {str(e)}")
+            return [] 
