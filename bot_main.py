@@ -991,7 +991,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(message, reply_markup=reply_markup)
             elif subscription_level == "Admin":
                 message += "\n\nAdmin"
-                keyboard = [[InlineKeyboardButton("Admin", callback_data='admin_info')]]
+                keyboard = [
+                    [InlineKeyboardButton("✉️ Сообщение", callback_data='send_messages')],
+                    [InlineKeyboardButton("📋 Статистика", callback_data='admin_statistics')]
+                ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await update.message.reply_text(message, reply_markup=reply_markup)
             else:
@@ -1017,8 +1020,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.edit_text("Premium")
             return
             
-        elif query.data == 'admin_info':
-            await query.message.edit_text("Admin")
+        elif query.data == 'send_messages':
+            # Проверяем уровень подписки
+            subscription_level = bot.mongo.get_subscription_level(user_id)
+            if subscription_level != "Admin":
+                await query.message.edit_text("❌ У вас нет доступа к этой функции")
+                return
+            await query.message.edit_text("Отправка сообщений")
+            return
+            
+        elif query.data == 'admin_statistics':
+            # Проверяем уровень подписки
+            subscription_level = bot.mongo.get_subscription_level(user_id)
+            if subscription_level != "Admin":
+                await query.message.edit_text("❌ У вас нет доступа к этой функции")
+                return
+            await query.message.edit_text("Статистика")
             return
             
         elif query.data == 'check_coefficients':
