@@ -952,6 +952,34 @@ class WBStockBot:
             logger.critical(f"CRITICAL ERROR getting warehouse tariffs for chat {chat_id}: {str(e)}", exc_info=True)
             return None
 
+    async def admin_statistics(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /admin_statistics"""
+        try:
+            user_id = update.effective_user.id
+            
+            # Проверяем уровень подписки
+            subscription_level = self.mongo.get_subscription_level(user_id)
+            if subscription_level != "Admin":
+                await update.message.reply_text("❌ У вас нет доступа к этой команде")
+                return
+            
+            # Получаем статистику
+            stats = self.mongo.get_user_statistics()
+            
+            # Формируем сообщение
+            message = (
+                f"📊 Статистика:\n\n"
+                f"Всего пользователей: {stats['total']}\n"
+                f"Base: {stats['base']}\n"
+                f"Premium: {stats['premium']}"
+            )
+            
+            await update.message.reply_text(message)
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении статистики: {str(e)}")
+            await update.message.reply_text("❌ Произошла ошибка при получении статистики")
+            
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:

@@ -549,4 +549,23 @@ class MongoDB:
             return []
         except Exception as e:
             logger.error(f"Ошибка при получении списка заблокированных пользователей: {str(e)}")
-            return [] 
+            return []
+
+    def get_user_statistics(self):
+        """Получение статистики пользователей"""
+        try:
+            # Получаем общее количество пользователей
+            total_users = self.users.count_documents({})
+            
+            # Получаем количество пользователей по уровням подписки
+            base_users = self.users.count_documents({'subscription.level': 0})
+            premium_users = self.users.count_documents({'subscription.level': 1})
+            
+            return {
+                'total': total_users,
+                'base': base_users,
+                'premium': premium_users
+            }
+        except Exception as e:
+            logger.error(f"Ошибка при получении статистики пользователей: {str(e)}")
+            return {'total': 0, 'base': 0, 'premium': 0} 
