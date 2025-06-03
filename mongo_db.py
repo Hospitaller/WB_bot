@@ -46,9 +46,6 @@ class MongoDB:
     def init_user(self, user_id: int, first_name: str = None, username: str = None, last_name: str = None):
         """Инициализация нового пользователя"""
         try:
-            # Преобразуем user_id в int
-            user_id = int(user_id)
-            
             # Получаем глобальные настройки
             global_settings = self.settings.find_one({'_id': 'global'})
             if not global_settings:
@@ -536,11 +533,7 @@ class MongoDB:
     def get_all_users(self):
         """Получение списка всех пользователей"""
         try:
-            # Преобразуем все user_id в int при получении
-            users = []
-            for user in self.users.find({}, {'user_id': 1, '_id': 0}):
-                user['user_id'] = int(user['user_id'])
-                users.append(user)
+            users = list(self.users.find({}, {'user_id': 1, '_id': 0}))
             return users
         except Exception as e:
             logger.error(f"Ошибка при получении списка пользователей: {str(e)}")
@@ -552,7 +545,7 @@ class MongoDB:
             banned_users = []
             settings = self.settings.find({'messages': 'banned'})
             for setting in settings:
-                banned_users.append(int(setting['user_id']))
+                banned_users.append(setting['user_id'])
             return banned_users
         except Exception as e:
             logger.error(f"Ошибка при получении списка заблокированных пользователей: {str(e)}")
