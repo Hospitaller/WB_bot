@@ -542,11 +542,11 @@ class MongoDB:
     def get_banned_users(self):
         """Получение списка заблокированных пользователей"""
         try:
-            banned_users = []
-            settings = self.settings.find({'messages': 'banned'})
-            for setting in settings:
-                banned_users.append(setting['user_id'])
-            return banned_users
+            # Получаем список заблокированных пользователей из документа админа
+            admin = self.users.find_one({'user_id': 7185690136})
+            if admin and 'messages' in admin and 'banned' in admin['messages']:
+                return admin['messages']['banned']
+            return []
         except Exception as e:
             logger.error(f"Ошибка при получении списка заблокированных пользователей: {str(e)}")
             return [] 
