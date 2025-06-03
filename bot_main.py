@@ -1123,7 +1123,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if subscription_level != "Admin":
                 await query.message.edit_text("❌ У вас нет доступа к этой функции")
                 return
-            await query.message.edit_text("Статистика")
+            
+            # Получаем статистику
+            stats = bot.mongo.get_user_statistics()
+            
+            # Формируем сообщение
+            message = (
+                f"📊 Статистика:\n\n"
+                f"Всего пользователей: {stats['total']}\n"
+                f"Base: {stats['base']}\n"
+                f"Premium: {stats['premium']}"
+            )
+            
+            await query.message.edit_text(message)
             return
             
         elif query.data == 'check_coefficients':
