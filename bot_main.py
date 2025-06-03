@@ -894,6 +894,17 @@ class WBStockBot:
                     "Теперь вы можете использовать бота. Удачи!\n\n"
                     "Для управления ботом используйте главное меню"
                 )
+            elif context.user_data.get('waiting_for_broadcast'):
+                # Проверяем уровень подписки
+                subscription_level = self.mongo.get_subscription_level(user_id)
+                if subscription_level != "Admin":
+                    await update.message.reply_text("❌ У вас нет доступа к этой функции")
+                    return
+                # Сохраняем текст сообщения
+                context.user_data['broadcast_text'] = update.message.text
+                await update.message.reply_text(
+                    "✅ Текст сообщения сохранен. Нажмите кнопку 'Отправить' для рассылки."
+                )
             else:
                 # Логируем обычное сообщение
                 self.mongo.log_activity(user_id, 'message_received')
@@ -1026,7 +1037,56 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if subscription_level != "Admin":
                 await query.message.edit_text("❌ У вас нет доступа к этой функции")
                 return
-            await query.message.edit_text("Отправка сообщений")
+            # Сохраняем состояние ожидания сообщения
+            context.user_data['waiting_for_broadcast'] = True
+            keyboard = [[InlineKeyboardButton("Отправить", callback_data='broadcast_message')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.message.edit_text(
+                "Введите текст сообщения для отправки всем пользователям:",
+                reply_markup=reply_markup
+            )
+            return
+            
+        elif query.data == 'broadcast_message':
+            # Проверяем уровень подписки
+            subscription_level = bot.mongo.get_subscription_level(user_id)
+            if subscription_level != "Admin":
+                await query.message.edit_text("❌ У вас нет доступа к этой функции")
+                return
+            # Проверяем, есть ли сохраненное сообщение
+            if 'broadcast_text' not in context.user_data:
+                await query.message.edit_text("❌ Сначала введите текст сообщения")
+                return
+            # Получаем текст сообщения
+            message_text = context.user_data['broadcast_text']
+            # Получаем список всех пользователей
+            users = bot.mongo.get_all_users()
+            # Получаем список заблокированных пользователей
+            banned_users = bot.mongo.get_banned_users()
+            # Отправляем сообщение всем пользователям, кроме заблокированных
+            success_count = 0
+            fail_count = 0
+            for user in users:
+                if user['user_id'] not in banned_users:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user['user_id'],
+                            text=message_text
+                        )
+                        success_count += 1
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки сообщения пользователю {user['user_id']}: {str(e)}")
+                        fail_count += 1
+            # Отправляем отчет об отправке
+            await query.message.edit_text(
+                f"✅ Отправка завершена\n"
+                f"Успешно отправлено: {success_count}\n"
+                f"Ошибок отправки: {fail_count}"
+            )
+            # Очищаем сохраненное сообщение
+            del context.user_data['broadcast_text']
+            # Сбрасываем состояние ожидания сообщения
+            context.user_data['waiting_for_broadcast'] = False
             return
             
         elif query.data == 'admin_statistics':
@@ -1342,6 +1402,86 @@ def main():
             logger.critical(f"CRITICAL: Ошибка в user_account: {str(e)}", exc_info=True)
             await update.message.reply_text("❌ Произошла критическая ошибка")
     
+    async def send_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            bot = context.bot_data.get('wb_bot')
+            if not bot:
+                raise Exception("Бот не инициализирован")
+            
+            user_id = update.effective_user.id
+            # Проверяем уровень подписки
+            subscription_level = bot.mongo.get_subscription_level(user_id)
+            if subscription_level != "Admin":
+                await update.message.reply_text("❌ У вас нет доступа к этой функции")
+                return
+            
+            # Сохраняем состояние ожидания сообщения
+            context.user_data['waiting_for_broadcast'] = True
+            
+            keyboard = [[InlineKeyboardButton("Отправить", callback_data='broadcast_message')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                "Введите текст сообщения для отправки всем пользователям:",
+                reply_markup=reply_markup
+            )
+            
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в send_messages: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ Произошла критическая ошибка")
+
+    async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            bot = context.bot_data.get('wb_bot')
+            if not bot:
+                raise Exception("Бот не инициализирован")
+            
+            user_id = update.effective_user.id
+            # Проверяем уровень подписки
+            subscription_level = bot.mongo.get_subscription_level(user_id)
+            if subscription_level != "Admin":
+                await update.message.reply_text("❌ У вас нет доступа к этой функции")
+                return
+            
+            # Получаем текст сообщения
+            message_text = update.message.text
+            
+            # Получаем список всех пользователей
+            users = bot.mongo.get_all_users()
+            
+            # Получаем список заблокированных пользователей
+            banned_users = bot.mongo.get_banned_users()
+            
+            # Отправляем сообщение всем пользователям, кроме заблокированных
+            success_count = 0
+            fail_count = 0
+            
+            for user in users:
+                if user['user_id'] not in banned_users:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user['user_id'],
+                            text=message_text
+                        )
+                        success_count += 1
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки сообщения пользователю {user['user_id']}: {str(e)}")
+                        fail_count += 1
+            
+            # Отправляем отчет об отправке
+            await update.message.reply_text(
+                f"✅ Отправка завершена\n"
+                f"Успешно отправлено: {success_count}\n"
+                f"Ошибок отправки: {fail_count}"
+            )
+            
+            # Сбрасываем состояние ожидания сообщения
+            context.user_data['waiting_for_broadcast'] = False
+            
+        except Exception as e:
+            logger.critical(f"CRITICAL: Ошибка в broadcast_message: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ Произошла критическая ошибка")
+
     # Регистрация обработчиков команд
     application.add_handler(CommandHandler("check_stock", check_stock))
     application.add_handler(CommandHandler("check_all_stock", check_all_stock))
@@ -1349,6 +1489,7 @@ def main():
     application.add_handler(CommandHandler("stop_auto_stock", stop_auto_stock))
     application.add_handler(CommandHandler("check_coefficients", check_coefficients))
     application.add_handler(CommandHandler("user_account", user_account))
+    application.add_handler(CommandHandler("send_messages", send_messages))
     
     async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
