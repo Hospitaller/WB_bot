@@ -1014,6 +1014,9 @@ class WBStockBot:
                 logger.error(f"No settings found for user {chat_id}")
                 return None
 
+            # Логируем структуру настроек
+            logger.info(f"Settings structure: {json.dumps(settings, indent=2)}")
+
             # Формируем даты для периода
             now = datetime.now(self.timezone)
             if period_type == 'day':
@@ -1036,11 +1039,15 @@ class WBStockBot:
                     "end": end_date.strftime("%Y-%m-%dT%H:%M:%S")
                 },
                 "orderBy": {
-                    "field": "ordersSumRub",
-                    "mode": "asc"
+                    "field": "ordersCount",
+                    "mode": "desc"
                 },
                 "page": 1
             }
+
+            # Логируем URL и данные запроса
+            logger.info(f"Request URL: {settings['api']['urls']['sales']}")
+            logger.info(f"Request data: {json.dumps(request_data, indent=2)}")
 
             timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
