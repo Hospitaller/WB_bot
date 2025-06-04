@@ -1014,9 +1014,6 @@ class WBStockBot:
                 logger.error(f"No settings found for user {chat_id}")
                 return None
 
-            # Логируем структуру настроек
-            logger.info(f"Settings structure: {json.dumps(settings, indent=2)}")
-
             # Формируем даты для периода
             now = datetime.now(self.timezone)
             if period_type == 'day':
@@ -1035,11 +1032,11 @@ class WBStockBot:
                 "nmIDs": [],
                 "timezone": "Europe/Moscow",
                 "period": {
-                    "begin": begin_date.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "end": end_date.strftime("%Y-%m-%dT%H:%M:%S")
+                    "begin": begin_date.strftime("%Y-%m-%d %H:%M:%S"),
+                    "end": end_date.strftime("%Y-%m-%d %H:%M:%S")
                 },
                 "orderBy": {
-                    "field": "ordersCount",
+                    "field": "orders",
                     "mode": "desc"
                 },
                 "page": 1
