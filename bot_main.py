@@ -980,6 +980,193 @@ class WBStockBot:
             logger.error(f"Ошибка при получении статистики: {str(e)}")
             await update.message.reply_text("❌ Произошла ошибка при получении статистики")
             
+    async def get_sales_data(self, context: ContextTypes.DEFAULT_TYPE, period_type: str = 'day'):
+        """Получение данных о продажах"""
+        try:
+            chat_id = context.job.chat_id if hasattr(context, 'job') else context._chat_id
+            
+            wb_token = self.user_data.get_user_token(chat_id)
+            if not wb_token:
+                await context.bot.send_message(chat_id=chat_id, text="❌ Токен WB не найден")
+                return None
+
+            headers = {
+                'Accept': 'application/json',
+                'Authorization': wb_token
+            }
+            
+            settings = self.mongo.get_user_settings(chat_id)
+            if not settings:
+                logger.error(f"No settings found for user {chat_id}")
+                return None
+
+            # Формируем даты для периода
+            now = datetime.now(self.timezone)
+            if period_type == 'day':
+                begin_date = now.replace(hour=0, minute=0, second=1)
+                end_date = now.replace(hour=23, minute=59, second=59)
+            else:  # week
+                begin_date = (now - timedelta(days=7)).replace(hour=0, minute=0, second=1)
+                end_date = now.replace(hour=23, minute=59, second=59)
+
+            # Формируем тело запроса
+            request_data = {
+                "brandNames": [],
+                "objectIDs": [],
+                "tagIDs": [],
+                "nmIDs": [],
+                "timezone": "Europe/Moscow",
+                "period": {
+                    "begin": begin_date.strftime("%Y-%m-%d %H:%M:%S"),
+                    "end": end_date.strftime("%Y-%m-%d %H:%M:%S")
+                },
+                "orderBy": {
+                    "field": "ordersSumRub",
+                    "mode": "asc"
+                },
+                "page": 1
+            }
+
+            timeout = aiohttp.ClientTimeout(total=60)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                response = await self.make_api_request(
+                    session,
+                    settings['api']['urls']['sales_request'],
+                    headers,
+                    context,
+                    chat_id,
+                    method='POST',
+                    json_data=request_data
+                )
+
+                if not response or 'data' not in response:
+                    return None
+
+                return response['data']
+
+        except Exception as e:
+            logger.error(f"Ошибка при получении данных о продажах: {str(e)}")
+            return None
+
+    async def format_sales_message(self, sales_data: dict, period_type: str) -> str:
+        """Форматирование сообщения со статистикой продаж"""
+        try:
+            if not sales_data or 'cards' not in sales_data:
+                return "❌ Нет данных о продажах"
+
+            # Группируем данные по дням и артикулам
+            sales_by_day = {}
+            total_orders = 0
+            total_sum = 0
+
+            for card in sales_data['cards']:
+                vendor_code = card.get('vendorCode', 'N/A')
+                stats = card.get('statistics', {}).get('selectedPeriod', {})
+                orders_count = stats.get('ordersCount', 0)
+                orders_sum = stats.get('ordersSumRub', 0)
+
+                if orders_count > 0:
+                    total_orders += orders_count
+                    total_sum += orders_sum
+
+                    # Получаем дату из периода
+                    begin_date = datetime.fromisoformat(stats.get('begin', '').replace('Z', ''))
+                    date_str = begin_date.strftime('%d.%m.%Y')
+
+                    if date_str not in sales_by_day:
+                        sales_by_day[date_str] = []
+
+                    sales_by_day[date_str].append({
+                        'vendor_code': vendor_code,
+                        'orders_count': orders_count
+                    })
+
+            # Формируем сообщение
+            if period_type == 'day':
+                message = f"Продажи за {list(sales_by_day.keys())[0]}:\n"
+            else:
+                message = f"Продажи за период {list(sales_by_day.keys())[0]} - {list(sales_by_day.keys())[-1]}:\n"
+
+            for date, sales in sales_by_day.items():
+                for sale in sales:
+                    message += f"- Артикул: {sale['vendor_code']}\n"
+                    message += f"- Заказали: {sale['orders_count']}\n"
+                    message += "---------------------------\n"
+
+            message += f"\nИтого:\n"
+            message += f"-- {total_orders} шт.\n"
+            message += f"-- на {total_sum} руб."
+
+            return message
+
+        except Exception as e:
+            logger.error(f"Ошибка при форматировании сообщения о продажах: {str(e)}")
+            return "❌ Ошибка при формировании статистики"
+
+    async def sales_day(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик статистики продаж за день"""
+        try:
+            user_id = update.effective_user.id
+            # Логируем запрос статистики за день
+            self.mongo.log_activity(user_id, 'sales_day_requested')
+            
+            # Получаем данные о продажах
+            sales_data = await self.get_sales_data(context, 'day')
+            if not sales_data:
+                await update.message.reply_text("❌ Не удалось получить данные о продажах")
+                return
+
+            # Форматируем и отправляем сообщение
+            message = await self.format_sales_message(sales_data, 'day')
+            await update.message.reply_text(message)
+
+        except Exception as e:
+            logger.error(f"Ошибка при получении статистики за день: {str(e)}")
+            await update.message.reply_text("❌ Произошла ошибка при получении статистики")
+
+    async def sales_week(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик статистики продаж за неделю"""
+        try:
+            user_id = update.effective_user.id
+            # Логируем запрос статистики за неделю
+            self.mongo.log_activity(user_id, 'sales_week_requested')
+            
+            # Получаем данные о продажах
+            sales_data = await self.get_sales_data(context, 'week')
+            if not sales_data:
+                await update.message.reply_text("❌ Не удалось получить данные о продажах")
+                return
+
+            # Форматируем и отправляем сообщение
+            message = await self.format_sales_message(sales_data, 'week')
+            await update.message.reply_text(message)
+
+        except Exception as e:
+            logger.error(f"Ошибка при получении статистики за неделю: {str(e)}")
+            await update.message.reply_text("❌ Произошла ошибка при получении статистики")
+
+    async def sales_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик команды /sales"""
+        try:
+            user_id = update.effective_user.id
+            # Логируем открытие меню статистики
+            self.mongo.log_activity(user_id, 'sales_menu_opened')
+            
+            keyboard = [
+                [InlineKeyboardButton("День", callback_data='sales_day')],
+                [InlineKeyboardButton("Неделя", callback_data='sales_week')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                "Статистика продаж:",
+                reply_markup=reply_markup
+            )
+
+        except Exception as e:
+            logger.error(f"Ошибка при открытии меню статистики: {str(e)}")
+            await update.message.reply_text("❌ Произошла ошибка при открытии меню статистики")
+
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -1299,6 +1486,30 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             bot.mongo.log_activity(user_id, 'stop_auto_coefficients_completely')
             await bot.process_stop_auto_coefficients(update, context)
                 
+        elif query.data == 'sales_day':
+            # Логируем запрос статистики за день
+            bot.mongo.log_activity(user_id, 'sales_day_requested')
+            # Получаем данные о продажах
+            sales_data = await bot.get_sales_data(context, 'day')
+            if not sales_data:
+                await query.message.edit_text("❌ Не удалось получить данные о продажах")
+                return
+            # Форматируем и отправляем сообщение
+            message = await bot.format_sales_message(sales_data, 'day')
+            await query.message.edit_text(message)
+            
+        elif query.data == 'sales_week':
+            # Логируем запрос статистики за неделю
+            bot.mongo.log_activity(user_id, 'sales_week_requested')
+            # Получаем данные о продажах
+            sales_data = await bot.get_sales_data(context, 'week')
+            if not sales_data:
+                await query.message.edit_text("❌ Не удалось получить данные о продажах")
+                return
+            # Форматируем и отправляем сообщение
+            message = await bot.format_sales_message(sales_data, 'week')
+            await query.message.edit_text(message)
+
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
         await query.message.reply_text("❌ Произошла критическая ошибка")
@@ -1530,6 +1741,7 @@ def main():
     application.add_handler(CommandHandler("check_coefficients", check_coefficients))
     application.add_handler(CommandHandler("user_account", user_account))
     application.add_handler(CommandHandler("send_messages", send_messages))
+    application.add_handler(CommandHandler("sales", bot.sales_menu))  # Добавляем обработчик команды /sales
     
     async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
