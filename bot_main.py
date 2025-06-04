@@ -1489,8 +1489,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == 'sales_day':
             # Логируем запрос статистики за день
             bot.mongo.log_activity(user_id, 'sales_day_requested')
+            
+            # Создаем FakeContext для передачи в get_sales_data
+            class FakeContext:
+                def __init__(self, chat_id, bot):
+                    self._chat_id = chat_id
+                    self.bot = bot
+            fake_context = FakeContext(update.effective_chat.id, context.bot)
+            
             # Получаем данные о продажах
-            sales_data = await bot.get_sales_data(context, 'day')
+            sales_data = await bot.get_sales_data(fake_context, 'day')
             if not sales_data:
                 await query.message.edit_text("❌ Не удалось получить данные о продажах")
                 return
@@ -1501,8 +1509,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == 'sales_week':
             # Логируем запрос статистики за неделю
             bot.mongo.log_activity(user_id, 'sales_week_requested')
+            
+            # Создаем FakeContext для передачи в get_sales_data
+            class FakeContext:
+                def __init__(self, chat_id, bot):
+                    self._chat_id = chat_id
+                    self.bot = bot
+            fake_context = FakeContext(update.effective_chat.id, context.bot)
+            
             # Получаем данные о продажах
-            sales_data = await bot.get_sales_data(context, 'week')
+            sales_data = await bot.get_sales_data(fake_context, 'week')
             if not sales_data:
                 await query.message.edit_text("❌ Не удалось получить данные о продажах")
                 return
