@@ -1019,8 +1019,9 @@ class WBStockBot:
                 begin_date = now.replace(hour=0, minute=0, second=1)
                 end_date = now.replace(hour=23, minute=59, second=59)
             else:  # week
-                begin_date = (now - timedelta(days=7)).replace(hour=0, minute=0, second=1)
+                # Для недели берем последние 7 дней, включая текущий
                 end_date = now.replace(hour=23, minute=59, second=59)
+                begin_date = (now - timedelta(days=6)).replace(hour=0, minute=0, second=1)
 
             # Формируем тело запроса
             request_data = {
@@ -1034,8 +1035,8 @@ class WBStockBot:
                     "end": end_date.strftime("%Y-%m-%d %H:%M:%S")
                 },
                 "orderBy": {
-                    "field": "ordersSumRub",
-                    "mode": "asc"
+                    "field": "ordersCount",
+                    "mode": "desc"
                 },
                 "page": 1
             }
