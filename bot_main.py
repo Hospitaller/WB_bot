@@ -1005,7 +1005,8 @@ class WBStockBot:
 
             headers = {
                 'Accept': 'application/json',
-                'Authorization': wb_token
+                'Authorization': wb_token,
+                'Content-Type': 'application/json'
             }
             
             settings = self.mongo.get_user_settings(chat_id)
