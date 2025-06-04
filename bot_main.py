@@ -1032,12 +1032,12 @@ class WBStockBot:
                 "nmIDs": [],
                 "timezone": "Europe/Moscow",
                 "period": {
-                    "begin": begin_date.strftime("%Y-%m-%d %H:%M:%S"),
-                    "end": end_date.strftime("%Y-%m-%d %H:%M:%S")
+                    "begin": begin_date.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "end": end_date.strftime("%Y-%m-%dT%H:%M:%S")
                 },
                 "orderBy": {
-                    "field": "ordersCount",
-                    "mode": "desc"
+                    "field": "ordersSumRub",
+                    "mode": "asc"
                 },
                 "page": 1
             }
