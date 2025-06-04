@@ -1179,7 +1179,7 @@ class WBStockBot:
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await update.message.reply_text(
-                "Статистика продаж:",
+                "Статистика продаж (до 23:59:59 Мск):",
                 reply_markup=reply_markup
             )
 
