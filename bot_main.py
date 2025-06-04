@@ -13,6 +13,7 @@ from user_data import UserData
 from config import CONFIG
 from mongo_db import MongoDB
 import telegram
+import urllib.parse
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -212,19 +213,31 @@ class WBStockBot:
             await context.bot.send_message(chat_id=chat_id, text=f"❌ Произошла критическая ошибка: {str(e)}")
 
     #Выполняет API запрос с повторными попытками
-    async def make_api_request(self, session, url, headers, context, chat_id, max_retries=3, timeout=30):
+    async def make_api_request(self, session, url, headers, context, chat_id, method='GET', json_data=None, max_retries=3, timeout=30):
         for attempt in range(max_retries):
             try:
-                async with session.get(url, headers=headers, timeout=timeout) as response:
-                    if response.status != 200:
-                        error_msg = f"Ошибка запроса: {response.status}"
-                        logger.critical(f"CRITICAL: {error_msg} для URL: {url}")
-                        await context.bot.send_message(
-                            chat_id=chat_id,
-                            text=f"❌ {error_msg}"
-                        )
-                        return None
-                    return await response.json()
+                if method == 'POST':
+                    async with session.post(url, headers=headers, json=json_data, timeout=timeout) as response:
+                        if response.status != 200:
+                            error_msg = f"Ошибка запроса: {response.status}"
+                            logger.critical(f"CRITICAL: {error_msg} для URL: {url}")
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=f"❌ {error_msg}"
+                            )
+                            return None
+                        return await response.json()
+                else:
+                    async with session.get(url, headers=headers, timeout=timeout) as response:
+                        if response.status != 200:
+                            error_msg = f"Ошибка запроса: {response.status}"
+                            logger.critical(f"CRITICAL: {error_msg} для URL: {url}")
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=f"❌ {error_msg}"
+                            )
+                            return None
+                        return await response.json()
             except asyncio.TimeoutError:
                 if attempt < max_retries - 1:
                     logger.warning(f"Таймаут при попытке {attempt + 1}/{max_retries}, повторная попытка...")
