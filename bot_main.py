@@ -1101,9 +1101,11 @@ class WBStockBot:
             if period_type == 'day':
                 message = f"Продажи за {list(sales_by_day.keys())[0]}:\n"
             else:
-                # Для недели берем первую и последнюю дату из отсортированного списка
-                sorted_dates = sorted(sales_by_day.keys(), key=lambda x: datetime.strptime(x, '%d.%m.%Y'))
-                message = f"Продажи за период {sorted_dates[0]} - {sorted_dates[-1]}:\n"
+                # Для недели используем даты из запроса
+                now = datetime.now(self.timezone)
+                end_date = now.replace(hour=23, minute=59, second=59)
+                begin_date = (now - timedelta(days=6)).replace(hour=0, minute=0, second=1)
+                message = f"Продажи за период {begin_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}:\n"
 
             for date, sales in sales_by_day.items():
                 for sale in sales:
