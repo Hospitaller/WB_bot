@@ -1031,7 +1031,7 @@ class WBStockBot:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 response = await self.make_api_request(
                     session,
-                    settings['api']['urls']['sales_request'],
+                    settings['api']['urls']['sales'],
                     headers,
                     context,
                     chat_id,
