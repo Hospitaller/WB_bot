@@ -1042,9 +1042,6 @@ class WBStockBot:
                 "page": 1
             }
 
-            # Логируем URL и данные запроса
-            logger.info(f"Request URL: {settings['api']['urls']['sales']}")
-            logger.info(f"Request data: {json.dumps(request_data, indent=2)}")
 
             timeout = aiohttp.ClientTimeout(total=60)
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -1104,7 +1101,9 @@ class WBStockBot:
             if period_type == 'day':
                 message = f"Продажи за {list(sales_by_day.keys())[0]}:\n"
             else:
-                message = f"Продажи за период {list(sales_by_day.keys())[0]} - {list(sales_by_day.keys())[-1]}:\n"
+                # Для недели берем первую и последнюю дату из отсортированного списка
+                sorted_dates = sorted(sales_by_day.keys(), key=lambda x: datetime.strptime(x, '%d.%m.%Y'))
+                message = f"Продажи за период {sorted_dates[0]} - {sorted_dates[-1]}:\n"
 
             for date, sales in sales_by_day.items():
                 for sale in sales:
