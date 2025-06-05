@@ -14,6 +14,7 @@ from config import CONFIG
 from mongo_db import MongoDB
 import telegram
 import urllib.parse
+import httpx
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -1186,6 +1187,70 @@ class WBStockBot:
         except Exception as e:
             logger.error(f"Ошибка при открытии меню статистики: {str(e)}")
             await update.message.reply_text("❌ Произошла ошибка при открытии меню статистики")
+
+    async def get_coefficients(self, chat_id: int) -> None:
+        """Получение коэффициентов приемки"""
+        try:
+            # Получаем токен из базы данных
+            token = await self.get_token(chat_id)
+            if not token:
+                await self.send_message(chat_id, "❌ Токен не найден. Используйте /token для установки токена.")
+                return
+
+            # Получаем настройки из базы данных
+            settings = await self.db.settings.find_one({"_id": "global"})
+            if not settings:
+                await self.send_message(chat_id, "❌ Настройки не найдены")
+                return
+
+            # Настройки запроса
+            headers = {
+                "Authorization": token,
+                "Content-Type": "application/json"
+            }
+
+            max_retries = settings.get("max_retries", 3)
+            retry_delay = settings.get("retry_delay", 5)
+            api_url = settings.get("coefficients_url")
+
+            for attempt in range(max_retries):
+                try:
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        response = await client.get(
+                            "https://supplies-api.wildberries.ru/api/v1/acceptance/coefficients",
+                            headers=headers
+                        )
+                        response.raise_for_status()
+                        data = response.json()
+                        break
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 503 and attempt < max_retries - 1:
+                        logger.warning(f"Получена ошибка 503, попытка {attempt + 1} из {max_retries}. Повтор через {retry_delay} сек.")
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    raise
+
+            if not data:
+                await self.send_message(chat_id, "❌ Нет данных о коэффициентах")
+                return
+
+            # Формируем сообщение
+            message = "📊 Коэффициенты приемки:\n\n"
+            for item in data:
+                message += f"Артикул: {item.get('vendorCode', 'N/A')}\n"
+                message += f"Коэффициент: {item.get('coefficient', 'N/A')}\n"
+                message += "---------------------------\n"
+
+            await self.send_message(chat_id, message)
+
+        except httpx.HTTPStatusError as e:
+            error_message = f"❌ Ошибка запроса: {e.response.status_code} для URL: {e.request.url}"
+            logger.critical(f"CRITICAL: {error_message}")
+            await self.send_message(chat_id, error_message)
+        except Exception as e:
+            error_message = f"❌ Ошибка при получении коэффициентов: {str(e)}"
+            logger.error(error_message)
+            await self.send_message(chat_id, error_message)
 
 # Обработчик команды /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
