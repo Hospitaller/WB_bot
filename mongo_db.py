@@ -43,6 +43,12 @@ class MongoDB:
             logger.error(f"Failed to get global settings: {str(e)}")
             raise
 
+    def get_moscow_time(self):
+        """Получение текущего времени в МСК в нужном формате"""
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        current_time = datetime.now(moscow_tz)
+        return current_time.strftime('%d-%m-%y %H:%M')
+
     def init_user(self, user_id: int, first_name: str = None, username: str = None, last_name: str = None):
         """Инициализация нового пользователя"""
         try:
@@ -109,7 +115,7 @@ class MongoDB:
                     'start_date': current_date,
                     'end_date': subscription_end_date
                 },
-                'last_activity': datetime.utcnow()
+                'last_activity': self.get_moscow_time()
             }
             
             self.users.update_one(
@@ -126,10 +132,7 @@ class MongoDB:
     def update_user_activity(self, user_id: int, telegram_user=None):
         """Обновление времени последней активности пользователя"""
         try:
-            # Получаем текущее время в МСК
-            moscow_tz = pytz.timezone('Europe/Moscow')
-            current_time = datetime.now(moscow_tz)
-            formatted_time = current_time.strftime('%d-%m-%y %H:%M')
+            formatted_time = self.get_moscow_time()
             
             # Обновляем в коллекции settings
             result = self.settings.update_one(
