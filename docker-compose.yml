@@ -9,4 +9,9 @@ services:
       - ./logs:/app/logs
       - ./.env:/app/.env:rw
     env_file:
-      - .env 
+      - .env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3" 
