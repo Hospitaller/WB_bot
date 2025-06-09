@@ -412,6 +412,7 @@ class WBStockBot:
                         # Проверяем остальные условия фильтрации
                         thresholds = settings.get('thresholds', {})
                         if (item.get('boxTypeName') == "Короба" and 
+                            item.get('allowUnload', False) and
                             item.get('coefficient') >= thresholds.get('min_coefficient', 0) and 
                             item.get('coefficient') <= thresholds.get('max_coefficient', 6)):
                             
