@@ -1,8 +1,5 @@
 import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
-import aiohttp
-import json
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from datetime import datetime, time, timedelta
 import os
 import asyncio
@@ -12,13 +9,6 @@ from dotenv import load_dotenv
 from user_data import UserData
 from config import CONFIG
 from mongo_db import MongoDB
-import telegram
-import urllib.parse
-# Импортирую клавиатуры и фабрику кнопок
-from keyboards.layouts import (
-    get_sales_menu_kb, get_premium_kb, get_admin_kb, get_broadcast_kb,
-    get_coefficients_menu_kb, get_stock_menu_kb, get_warehouse_nav_kb, get_disable_warehouses_kb
-)
 # Импорт обработчиков
 from handlers.common import start, info, handle_message
 from handlers.admin import admin_statistics, send_messages, broadcast_message
@@ -26,10 +16,8 @@ from handlers.stock import check_stock, check_all_stock, start_auto_stock, stop_
 from handlers.coefficients import check_coefficients
 from handlers.user import user_account
 from handlers.buttons import button_handler
-from services.stock import format_stock_data, fetch_wb_data, make_api_request, start_periodic_checks, stop_periodic_checks
-from services.coefficients import get_warehouse_coefficients, start_auto_coefficients, stop_auto_coefficients
-from services.warehouses import get_warehouse_list, show_warehouse_selection, handle_warehouse_selection, process_disable_warehouses, process_stop_auto_coefficients, get_warehouse_tariffs
-from services.utils import is_working_time
+from handlers.sales import sales_menu
+from services.warehouses import get_warehouse_tariffs
 
 # Загрузка переменных окружения
 load_dotenv()
