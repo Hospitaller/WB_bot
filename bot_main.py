@@ -17,7 +17,6 @@ from handlers.coefficients import check_coefficients
 from handlers.user import user_account
 from handlers.buttons import button_handler
 from handlers.sales import sales_menu
-from services.warehouses import get_warehouse_tariffs
 
 # Загрузка переменных окружения
 load_dotenv()
