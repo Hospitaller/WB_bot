@@ -6,7 +6,8 @@ from keyboards.layouts import (
 )
 import logging
 from services.sales import get_sales_data, format_sales_message
-from services.warehouses import get_warehouse_coefficients, show_warehouse_selection, get_warehouse_list, start_auto_coefficients, stop_auto_coefficients, process_disable_warehouses, process_stop_auto_coefficients
+from services.coefficients import get_warehouse_coefficients
+from services.warehouses import show_warehouse_selection, get_warehouse_list, start_auto_coefficients, stop_auto_coefficients, process_disable_warehouses, process_stop_auto_coefficients
 from services.stock import fetch_wb_data, start_periodic_checks, stop_periodic_checks
 
 logger = logging.getLogger(__name__)
