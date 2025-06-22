@@ -7,13 +7,13 @@ logger = logging.getLogger(__name__)
 
 async def admin_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        bot = context.bot_data.get('wb_bot')
+        mongo = context.bot_data['mongo']
         user_id = update.effective_user.id
-        subscription_level = bot.mongo.get_subscription_level(user_id)
+        subscription_level = mongo.get_subscription_level(user_id)
         if subscription_level != "Admin":
             await update.message.reply_text("❌ У вас нет доступа к этой команде")
             return
-        stats = bot.mongo.get_user_statistics()
+        stats = mongo.get_user_statistics()
         message = (
             f"📊 Статистика:\n\n"
             f"Всего пользователей: {stats['total']}\n"
@@ -27,9 +27,9 @@ async def admin_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        bot = context.bot_data.get('wb_bot')
+        mongo = context.bot_data['mongo']
         user_id = update.effective_user.id
-        subscription_level = bot.mongo.get_subscription_level(user_id)
+        subscription_level = mongo.get_subscription_level(user_id)
         if subscription_level != "Admin":
             await update.message.reply_text("❌ У вас нет доступа к этой функции")
             return
@@ -45,15 +45,15 @@ async def send_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        bot = context.bot_data.get('wb_bot')
+        mongo = context.bot_data['mongo']
         user_id = update.effective_user.id
-        subscription_level = bot.mongo.get_subscription_level(user_id)
+        subscription_level = mongo.get_subscription_level(user_id)
         if subscription_level != "Admin":
             await update.message.reply_text("❌ У вас нет доступа к этой функции")
             return
         message_text = update.message.text
-        users = bot.mongo.get_all_users()
-        banned_users = bot.mongo.get_banned_users()
+        users = mongo.get_all_users()
+        banned_users = mongo.get_banned_users()
         success_count = 0
         fail_count = 0
         for user in users:

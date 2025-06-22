@@ -7,9 +7,9 @@ logger = logging.getLogger(__name__)
 
 async def check_coefficients(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        bot = context.bot_data.get('wb_bot')
+        mongo = context.bot_data['mongo']
         user_id = update.effective_user.id
-        bot.mongo.log_activity(user_id, 'check_coefficients_requested')
+        mongo.log_activity(user_id, 'check_coefficients_requested')
         reply_markup = get_coefficients_menu_kb()
         await update.message.reply_text("Выберите действие:", reply_markup=reply_markup)
     except Exception as e:

@@ -7,9 +7,9 @@ logger = logging.getLogger(__name__)
 
 async def sales_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        bot = context.bot_data.get('wb_bot')
+        mongo = context.bot_data['mongo']
         user_id = update.effective_user.id
-        bot.mongo.log_activity(user_id, 'sales_menu_opened')
+        mongo.log_activity(user_id, 'sales_menu_opened')
         reply_markup = get_sales_menu_kb()
         await update.message.reply_text(
             "Статистика продаж (до 23:59:59 Мск):",

@@ -7,17 +7,17 @@ logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        bot = context.bot_data.get('wb_bot')
-        if not bot:
-            raise Exception("Бот не инициализирован")
+        mongo = context.bot_data['mongo']
+        user_data = context.bot_data['user_data']
+        timezone = context.bot_data['timezone']
         user_id = update.effective_user.id
         first_name = update.effective_user.first_name
         last_name = update.effective_user.last_name
         username = update.effective_user.username
         logger.info(f"Start command received from user {user_id}")
-        bot.mongo.log_activity(user_id, 'start_command')
-        logger.info(f"User exists check: {bot.user_data.is_user_exists(user_id)}")
-        if not bot.user_data.is_user_exists(user_id):
+        mongo.log_activity(user_id, 'start_command')
+        logger.info(f"User exists check: {user_data.is_user_exists(user_id)}")
+        if not user_data.is_user_exists(user_id):
             logger.info(f"Initializing new user {user_id}")
             await update.message.reply_text(
                 "👋 Привет! Я бот для работы с Wildberries.\n"
@@ -26,12 +26,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Введите ваш токен:"
             )
             context.user_data['waiting_for_token'] = True
-            bot.mongo.init_user(user_id, first_name, username, last_name)
+            mongo.init_user(user_id, first_name, username, last_name)
             logger.info(f"User {user_id} initialized in MongoDB")
         else:
-            bot.mongo.update_user_activity(user_id, update.effective_user)
+            mongo.update_user_activity(user_id, update.effective_user)
             logger.info(f"User {user_id} already exists")
-            subscription_level = bot.mongo.get_subscription_level(user_id)
+            subscription_level = mongo.get_subscription_level(user_id)
             message = "Для управления ботом используйте главное меню"
             if subscription_level == "Premium":
                 message += "\n\nPremium"
@@ -48,11 +48,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        bot = context.bot_data.get('wb_bot')
-        if not bot:
-            raise Exception("Бот не инициализирован")
+        mongo = context.bot_data['mongo']
         user_id = update.effective_user.id
-        bot.mongo.update_user_activity(user_id, update.effective_user)
+        mongo.update_user_activity(user_id, update.effective_user)
         message = (
             "🤖 *Информация о боте*\n\n"
             "Бот показывает остатки вашего товара на складах (FBW) в ручном или автоматическом режиме. Умеет искать лимиты на бесплатную приемку по заданным параметрам, показывает коэффициенты на логистику. Работает в тестовом режиме.\n\n"
@@ -74,15 +72,16 @@ async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        bot = context.bot_data.get('wb_bot')
+        mongo = context.bot_data['mongo']
+        user_data = context.bot_data['user_data']
         user_id = update.effective_user.id
-        bot.mongo.update_user_activity(user_id, update.effective_user)
+        mongo.update_user_activity(user_id, update.effective_user)
         if context.user_data.get('waiting_for_token'):
             token = update.message.text.strip()
-            bot.user_data.add_user(user_id, token)
-            bot.mongo.init_user(user_id)
-            bot.mongo.update_user_activity(user_id, update.effective_user)
-            bot.mongo.log_activity(user_id, 'token_added')
+            user_data.add_user(user_id, token)
+            mongo.init_user(user_id)
+            mongo.update_user_activity(user_id, update.effective_user)
+            mongo.log_activity(user_id, 'token_added')
             context.user_data['waiting_for_token'] = False
             await update.message.reply_text(
                 "✅ Токен успешно добавлен!\n"
@@ -90,7 +89,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Для управления ботом используйте главное меню"
             )
         elif context.user_data.get('waiting_for_broadcast'):
-            subscription_level = bot.mongo.get_subscription_level(user_id)
+            subscription_level = mongo.get_subscription_level(user_id)
             if subscription_level != "Admin":
                 await update.message.reply_text("❌ У вас нет доступа к этой функции")
                 return
@@ -99,7 +98,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "✅ Текст сообщения сохранен. Нажмите кнопку 'Отправить' для рассылки."
             )
         else:
-            bot.mongo.log_activity(user_id, 'message_received')
+            mongo.log_activity(user_id, 'message_received')
             await update.message.reply_text(
                 "Для управления ботом используйте главное меню"
             )
