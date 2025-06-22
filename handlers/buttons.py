@@ -5,6 +5,7 @@ from keyboards.layouts import (
     get_sales_menu_kb, get_warehouse_nav_kb, get_disable_warehouses_kb
 )
 import logging
+from services.sales import get_sales_data, format_sales_message
 
 logger = logging.getLogger(__name__)
 
@@ -194,11 +195,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     self._chat_id = chat_id
                     self.bot = bot
             fake_context = FakeContext(update.effective_chat.id, context.bot)
-            sales_data = await bot.get_sales_data(fake_context, 'day')
+            sales_data = await get_sales_data(fake_context, 'day', bot.mongo, bot.user_data, bot.timezone)
             if not sales_data:
                 await query.message.edit_text("❌ Не удалось получить данные о продажах")
                 return
-            message = await bot.format_sales_message(sales_data, 'day')
+            message = await format_sales_message(sales_data, 'day', bot.timezone)
             await query.message.edit_text(message)
         elif query.data == 'sales_week':
             bot.mongo.log_activity(user_id, 'sales_week_requested')
@@ -207,11 +208,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     self._chat_id = chat_id
                     self.bot = bot
             fake_context = FakeContext(update.effective_chat.id, context.bot)
-            sales_data = await bot.get_sales_data(fake_context, 'week')
+            sales_data = await get_sales_data(fake_context, 'week', bot.mongo, bot.user_data, bot.timezone)
             if not sales_data:
                 await query.message.edit_text("❌ Не удалось получить данные о продажах")
                 return
-            message = await bot.format_sales_message(sales_data, 'week')
+            message = await format_sales_message(sales_data, 'week', bot.timezone)
             await query.message.edit_text(message)
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
