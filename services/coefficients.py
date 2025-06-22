@@ -53,10 +53,11 @@ async def get_warehouse_coefficients(context, mongo, user_data, timezone):
         async with aiohttp.ClientSession(timeout=timeout) as session:
             if not hasattr(context, 'job'):
                 await context.bot.send_message(chat_id=chat_id, text="🔄 Получаю коэффициенты складов...")
-            coefficients_response = await context.bot_data['make_api_request'](
+            coefficients_response = await make_api_request(
                 session, settings['api']['urls']['coefficients'], headers, context, chat_id
             )
-            tariffs_data = await context.bot_data['get_warehouse_tariffs'](context, chat_id)
+            from services.warehouses import get_warehouse_tariffs
+            tariffs_data = await get_warehouse_tariffs(context, chat_id, mongo, user_data)
             if not coefficients_response or not isinstance(coefficients_response, list):
                 await context.bot.send_message(chat_id=chat_id, text="❌ Не удалось получить данные о коэффициентах")
                 return
@@ -80,7 +81,7 @@ async def start_auto_coefficients(application, chat_id, mongo, timezone):
         interval = settings.get('intervals', {}).get('check_coefficients', 1)
         logger.info(f"Using interval {interval} minutes for user {chat_id}")
         job = application.job_queue.run_repeating(
-            callback=lambda context: get_warehouse_coefficients(context, mongo, application.bot_data['wb_bot'].user_data, timezone),
+            callback=lambda context: get_warehouse_coefficients(context, mongo, application.bot_data['user_data'], timezone),
             interval=timedelta(minutes=interval),
             first=0,
             chat_id=chat_id,

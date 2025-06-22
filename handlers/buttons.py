@@ -6,6 +6,8 @@ from keyboards.layouts import (
 )
 import logging
 from services.sales import get_sales_data, format_sales_message
+from services.warehouses import get_warehouse_coefficients, show_warehouse_selection, get_warehouse_list, start_auto_coefficients, stop_auto_coefficients, process_disable_warehouses, process_stop_auto_coefficients
+from services.stock import fetch_wb_data, start_periodic_checks, stop_periodic_checks
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +100,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     self._chat_id = chat_id
                     self.bot = bot
             fake_context = FakeContext(update.effective_chat.id, context.bot)
-            await context.bot.fetch_wb_data(fake_context)
+            await fetch_wb_data(fake_context, mongo, user_data, timezone)
         elif query.data == 'start_auto_stock':
             try:
                 mongo.log_activity(user_id, 'start_auto_stock_requested')
-                await context.bot.start_periodic_checks(update.effective_chat.id)
+                await start_periodic_checks(update.effective_chat.id, mongo, user_data, timezone, active_jobs)
                 await query.message.edit_text(
                     f"✅ Автоматические проверки запущены (каждые {CHECK_STOCK_INTERVAL} минут(ы) в рабочее время)"
                 )
@@ -111,7 +113,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text("❌ Произошла ошибка при запуске автоматических проверок")
         elif query.data == 'stop_auto_stock':
             mongo.log_activity(user_id, 'stop_auto_stock_requested')
-            if await context.bot.stop_periodic_checks(update.effective_chat.id):
+            if await stop_periodic_checks(update.effective_chat.id, active_jobs):
                 await query.message.edit_text("🛑 Автоматические проверки остановлены")
             else:
                 await query.message.edit_text("ℹ️ Нет активных автоматических проверок")
@@ -123,14 +125,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     self._chat_id = chat_id
                     self.bot = bot
             fake_context = FakeContext(update.effective_chat.id, context.bot)
-            await context.bot.get_warehouse_coefficients(fake_context)
+            await get_warehouse_coefficients(fake_context, update.effective_chat.id, mongo, user_data)
         elif query.data == 'start_auto_coefficients':
             try:
                 mongo.log_activity(user_id, 'start_auto_coefficients_requested')
                 if not context.bot_data.get('TARGET_WAREHOUSE_ID'):
-                    await context.bot.show_warehouse_selection(update, context)
+                    await show_warehouse_selection(update, context, mongo, user_data)
                 else:
-                    await context.bot.start_auto_coefficients(update.effective_chat.id)
+                    await start_auto_coefficients(update.effective_chat.id, mongo, user_data, timezone, active_coefficient_jobs)
                     await query.message.edit_text(
                         f"✅ Автоматические проверки запущены (каждые {CHECK_COEFFICIENTS_INTERVAL} минут(ы) в рабочее время)"
                     )
@@ -139,7 +141,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text("❌ Произошла ошибка при запуске автоматических проверок")
         elif query.data == 'stop_auto_coefficients':
             mongo.log_activity(user_id, 'stop_auto_coefficients_requested')
-            if await context.bot.stop_auto_coefficients(update.effective_chat.id):
+            if await stop_auto_coefficients(update.effective_chat.id, active_coefficient_jobs):
                 await query.message.edit_text("🛑 Автоматические проверки остановлены")
             else:
                 await query.message.edit_text("ℹ️ Нет активных автоматических проверок")
@@ -150,24 +152,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             current_warehouses = mongo.get_selected_warehouses(chat_id)
             current_warehouses.append(warehouse_id)
             mongo.save_selected_warehouses(chat_id, current_warehouses)
-            await context.bot.show_warehouse_selection(update, context)
+            await show_warehouse_selection(update, context, mongo, user_data)
         elif query.data.startswith('warehouse_page_'):
             page = int(query.data.split('_')[-1])
             mongo.log_activity(user_id, f'warehouse_page_{page}')
-            await context.bot.show_warehouse_selection(update, context, page)
+            await show_warehouse_selection(update, context, mongo, user_data, page)
         elif query.data == 'remove_last_warehouse':
             try:
                 chat_id = update.effective_chat.id
                 current_warehouses = mongo.get_selected_warehouses(chat_id)
                 if current_warehouses:
                     mongo.log_activity(user_id, 'remove_last_warehouse')
-                    warehouses = await context.bot.get_warehouse_list(context, chat_id)
+                    warehouses = await get_warehouse_list(context, chat_id, mongo, user_data)
                     if not warehouses:
                         raise Exception("Не удалось получить список складов")
                     removed_warehouse = current_warehouses.pop()
                     mongo.save_selected_warehouses(chat_id, current_warehouses)
                     removed_name = warehouses.get(removed_warehouse, 'Неизвестный склад')
-                    await context.bot.show_warehouse_selection(update, context, 0)
+                    await show_warehouse_selection(update, context, mongo, user_data, 0)
                     await context.bot.send_message(
                         chat_id=chat_id,
                         text=f"🗑 Удален склад: {removed_name}"
@@ -180,7 +182,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             mongo.log_activity(user_id, 'finish_warehouse_selection')
             current_warehouses = mongo.get_selected_warehouses(chat_id)
             if current_warehouses:
-                await context.bot.start_auto_coefficients(chat_id)
+                await start_auto_coefficients(chat_id, mongo, user_data, timezone, active_coefficient_jobs)
                 await query.message.edit_text(
                     f"✅ Автоматические проверки запущены (каждые {CHECK_COEFFICIENTS_INTERVAL} минут(ы) в рабочее время)"
                 )
@@ -189,10 +191,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await start(update, context)
         elif query.data.startswith('disable_warehouses:'):
             mongo.log_activity(user_id, 'disable_warehouses_until_tomorrow')
-            await context.bot.process_disable_warehouses(update, context)
+            await process_disable_warehouses(update, context, mongo, user_data)
         elif query.data == 'stop_auto_coefficients':
             mongo.log_activity(user_id, 'stop_auto_coefficients_completely')
-            await context.bot.process_stop_auto_coefficients(update, context)
+            await process_stop_auto_coefficients(update, context, mongo, user_data)
         elif query.data == 'sales_day':
             mongo.log_activity(user_id, 'sales_day_requested')
             class FakeContext:

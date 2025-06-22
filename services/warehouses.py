@@ -7,7 +7,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-async def get_warehouse_list(context, chat_id, user_data, mongo):
+async def get_warehouse_list(context, chat_id, mongo, user_data):
     wb_token = user_data.get_user_token(chat_id)
     if not wb_token:
         return None
@@ -17,7 +17,7 @@ async def get_warehouse_list(context, chat_id, user_data, mongo):
     }
     settings = mongo.get_user_settings(chat_id)
     async with aiohttp.ClientSession() as session:
-        response = await context.bot_data['make_api_request'](session, settings['api']['urls']['coefficients'], headers, context, chat_id)
+        response = await make_api_request(session, settings['api']['urls']['coefficients'], headers, context, chat_id)
         if not response or not isinstance(response, list):
             return None
         warehouses = {}
@@ -28,9 +28,9 @@ async def get_warehouse_list(context, chat_id, user_data, mongo):
                 warehouses[warehouse_id] = warehouse_name
         return warehouses
 
-async def show_warehouse_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, page=0, user_data=None, mongo=None):
+async def show_warehouse_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, mongo, user_data, page=0):
     chat_id = update.effective_chat.id
-    warehouses = await get_warehouse_list(context, chat_id, user_data, mongo)
+    warehouses = await get_warehouse_list(context, chat_id, mongo, user_data)
     if not warehouses:
         if update.callback_query:
             await update.callback_query.message.edit_text("❌ Не удалось получить список складов")
@@ -66,7 +66,7 @@ async def show_warehouse_selection(update: Update, context: ContextTypes.DEFAULT
     else:
         await update.message.reply_text(message_text, reply_markup=reply_markup)
 
-async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, user_data=None, mongo=None):
+async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, mongo, user_data):
     query = update.callback_query
     try:
         await query.answer()
@@ -78,19 +78,19 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
         current_warehouses = mongo.get_selected_warehouses(chat_id)
         current_warehouses.append(warehouse_id)
         mongo.save_selected_warehouses(chat_id, current_warehouses)
-        await show_warehouse_selection(update, context, user_data=user_data, mongo=mongo)
+        await show_warehouse_selection(update, context, mongo, user_data)
     elif query.data.startswith("warehouse_page_"):
         page = int(query.data.split("_")[-1])
-        await show_warehouse_selection(update, context, page, user_data=user_data, mongo=mongo)
+        await show_warehouse_selection(update, context, mongo, user_data, page)
     elif query.data == "remove_last_warehouse":
         try:
             current_warehouses = mongo.get_selected_warehouses(chat_id)
             if current_warehouses:
                 removed_warehouse = current_warehouses.pop()
                 mongo.save_selected_warehouses(chat_id, current_warehouses)
-                warehouses = await get_warehouse_list(context, chat_id, user_data, mongo)
+                warehouses = await get_warehouse_list(context, chat_id, mongo, user_data)
                 removed_name = warehouses.get(removed_warehouse, 'Неизвестный склад')
-                await show_warehouse_selection(update, context, 0, user_data=user_data, mongo=mongo)
+                await show_warehouse_selection(update, context, mongo, user_data, 0)
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"🗑 Удален склад: {removed_name}"
@@ -102,16 +102,16 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
         current_warehouses = mongo.get_selected_warehouses(chat_id)
         if current_warehouses:
             from services.coefficients import start_auto_coefficients
-            await start_auto_coefficients(context.application, chat_id, mongo, context.bot_data['wb_bot'].timezone)
+            await start_auto_coefficients(context.application, chat_id, mongo, context.bot_data['timezone'])
             await query.message.edit_text(
-                f"✅ Автоматические проверки запущены (каждые {{context.bot_data['wb_bot'].CONFIG['CHECK_COEFFICIENTS_INTERVAL']}} минут(ы) в рабочее время)"
+                f"✅ Автоматические проверки запущены (каждые {context.bot_data['CHECK_COEFFICIENTS_INTERVAL']} минут(ы) в рабочее время)"
             )
         else:
             await query.message.edit_text("❌ Не выбрано ни одного склада")
             from handlers.common import start
             await start(update, context)
 
-async def process_disable_warehouses(update: Update, context: ContextTypes.DEFAULT_TYPE, mongo=None, user_data=None):
+async def process_disable_warehouses(update: Update, context: ContextTypes.DEFAULT_TYPE, mongo, user_data):
     query = update.callback_query
     user_id = query.from_user.id
     warehouses = query.data.split(':')[1].split(',')
@@ -120,7 +120,7 @@ async def process_disable_warehouses(update: Update, context: ContextTypes.DEFAU
         if not settings:
             await query.answer("❌ Ошибка: не удалось получить настройки")
             return
-        warehouses_data = await get_warehouse_list(context, user_id, user_data, mongo)
+        warehouses_data = await get_warehouse_list(context, user_id, mongo, user_data)
         if not warehouses_data:
             await query.answer("❌ Ошибка: не удалось получить список складов")
             return
@@ -146,7 +146,7 @@ async def process_disable_warehouses(update: Update, context: ContextTypes.DEFAU
         logger.error(f"Ошибка при отключении складов: {str(e)}")
         await query.answer("❌ Произошла ошибка при отключении складов")
 
-async def process_stop_auto_coefficients(update: Update, context: ContextTypes.DEFAULT_TYPE, mongo=None):
+async def process_stop_auto_coefficients(update: Update, context: ContextTypes.DEFAULT_TYPE, mongo):
     query = update.callback_query
     user_id = query.from_user.id
     try:
@@ -177,7 +177,7 @@ async def get_warehouse_tariffs(context, chat_id, mongo, user_data):
         current_date = datetime.now().strftime('%Y-%m-%d')
         url = settings['api']['urls']['warehouse_tariffs'].format(date_now=current_date)
         async with aiohttp.ClientSession() as session:
-            response = await context.bot_data['make_api_request'](session, url, headers, context, chat_id)
+            response = await make_api_request(session, url, headers, context, chat_id)
             if not response or 'response' not in response or 'data' not in response['response']:
                 return None
             return response['response']['data']
