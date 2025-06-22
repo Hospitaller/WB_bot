@@ -4,10 +4,14 @@ from telegram.ext import ContextTypes
 from keyboards.layouts import get_warehouse_nav_kb
 import aiohttp
 from datetime import datetime
+from services.api_utils import make_api_request
 
 logger = logging.getLogger(__name__)
 
-async def get_warehouse_list(context, chat_id, mongo, user_data):
+async def get_warehouse_list(context, chat_id, mongo, user_data, use_cache=True):
+    # Кэшируем список складов в context.user_data['cached_warehouses']
+    if use_cache and hasattr(context, 'user_data') and 'cached_warehouses' in context.user_data:
+        return context.user_data['cached_warehouses']
     wb_token = user_data.get_user_token(chat_id)
     if not wb_token:
         return None
@@ -26,12 +30,16 @@ async def get_warehouse_list(context, chat_id, mongo, user_data):
             warehouse_name = item.get('warehouseName')
             if warehouse_id and warehouse_name:
                 warehouses[warehouse_id] = warehouse_name
+        if hasattr(context, 'user_data'):
+            context.user_data['cached_warehouses'] = warehouses
         return warehouses
 
-async def show_warehouse_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, mongo, user_data, page=0):
+async def show_warehouse_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, mongo, user_data, page=0, reset_cache=False):
     chat_id = update.effective_chat.id
-    warehouses = await get_warehouse_list(context, chat_id, mongo, user_data)
+    warehouses = await get_warehouse_list(context, chat_id, mongo, user_data, use_cache=not reset_cache)
     if not warehouses:
+        if hasattr(context, 'user_data') and 'cached_warehouses' in context.user_data:
+            del context.user_data['cached_warehouses']
         if update.callback_query:
             await update.callback_query.message.edit_text("❌ Не удалось получить список складов")
         else:
@@ -76,6 +84,9 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
     if query.data.startswith("select_warehouse_"):
         warehouse_id = int(query.data.split("_")[-1])
         current_warehouses = mongo.get_selected_warehouses(chat_id)
+        if len(current_warehouses) >= 5:
+            await query.answer("⚠️ Нельзя выбрать более 5 складов для отслеживания!", show_alert=True)
+            return
         current_warehouses.append(warehouse_id)
         mongo.save_selected_warehouses(chat_id, current_warehouses)
         await show_warehouse_selection(update, context, mongo, user_data)
@@ -88,7 +99,7 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
             if current_warehouses:
                 removed_warehouse = current_warehouses.pop()
                 mongo.save_selected_warehouses(chat_id, current_warehouses)
-                warehouses = await get_warehouse_list(context, chat_id, mongo, user_data)
+                warehouses = await get_warehouse_list(context, chat_id, mongo, user_data) if 'cached_warehouses' not in context.user_data else context.user_data['cached_warehouses']
                 removed_name = warehouses.get(removed_warehouse, 'Неизвестный склад')
                 await show_warehouse_selection(update, context, mongo, user_data, 0)
                 await context.bot.send_message(
@@ -99,6 +110,9 @@ async def handle_warehouse_selection(update: Update, context: ContextTypes.DEFAU
             logger.critical(f"CRITICAL: Ошибка при удалении последнего склада: {str(e)}", exc_info=True)
             await query.message.edit_text("❌ Произошла ошибка при удалении склада")
     elif query.data == "finish_warehouse_selection":
+        # После завершения выбора очищаем кэш складов
+        if hasattr(context, 'user_data') and 'cached_warehouses' in context.user_data:
+            del context.user_data['cached_warehouses']
         current_warehouses = mongo.get_selected_warehouses(chat_id)
         if current_warehouses:
             from services.coefficients import start_auto_coefficients
@@ -120,15 +134,7 @@ async def process_disable_warehouses(update: Update, context: ContextTypes.DEFAU
         if not settings:
             await query.answer("❌ Ошибка: не удалось получить настройки")
             return
-        warehouses_data = await get_warehouse_list(context, user_id, mongo, user_data)
-        if not warehouses_data:
-            await query.answer("❌ Ошибка: не удалось получить список складов")
-            return
-        warehouse_ids = []
-        for warehouse_name in warehouses:
-            warehouse_id = next((id for id, name in warehouses_data.items() if name == warehouse_name), None)
-            if warehouse_id:
-                warehouse_ids.append(str(warehouse_id))
+        warehouse_ids = [str(wh_id) for wh_id in warehouses if wh_id]
         if warehouse_ids:
             mongo.update_user_settings(user_id, {
                 'warehouses': {

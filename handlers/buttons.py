@@ -101,7 +101,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     self._chat_id = chat_id
                     self.bot = bot
             fake_context = FakeContext(update.effective_chat.id, context.bot)
-            await fetch_wb_data(fake_context, mongo, user_data, timezone)
+            await fetch_wb_data(fake_context, user_data, mongo, timezone)
         elif query.data == 'start_auto_stock':
             try:
                 mongo.log_activity(user_id, 'start_auto_stock_requested')
@@ -133,24 +133,30 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if not context.bot_data.get('TARGET_WAREHOUSE_ID'):
                     await show_warehouse_selection(update, context, mongo, user_data)
                 else:
-                    await start_auto_coefficients(update.effective_chat.id, mongo, user_data, timezone, active_coefficient_jobs)
+                    await start_auto_coefficients(context.application, update.effective_chat.id, mongo, timezone)
+                    settings = mongo.get_user_settings(update.effective_chat.id)
+                    interval = settings.get('intervals', {}).get('check_coefficients', 1)
                     await query.message.edit_text(
-                        f"✅ Автоматические проверки запущены (каждые {CHECK_COEFFICIENTS_INTERVAL} минут(ы) в рабочее время)"
+                        f"✅ Автоматические проверки запущены (каждые {interval} минут(ы) в рабочее время)"
                     )
             except Exception as e:
                 logger.critical(f"CRITICAL: Ошибка в start_auto_coefficients: {str(e)}", exc_info=True)
                 await query.message.edit_text("❌ Произошла ошибка при запуске автоматических проверок")
         elif query.data == 'stop_auto_coefficients':
             mongo.log_activity(user_id, 'stop_auto_coefficients_requested')
-            if await stop_auto_coefficients(update.effective_chat.id, active_coefficient_jobs):
+            stopped = await stop_coefficients_for_user(context, update.effective_chat.id, mongo)
+            if stopped:
                 await query.message.edit_text("🛑 Автоматические проверки остановлены")
             else:
-                await query.message.edit_text("ℹ️ Нет активных автоматических проверок")
+                await query.message.edit_text("🛑 Автоматические проверки остановлены и настройки складов сброшены")
         elif query.data.startswith('select_warehouse_'):
             warehouse_id = int(query.data.split('_')[-1])
             chat_id = update.effective_chat.id
             mongo.log_activity(user_id, f'warehouse_selected_{warehouse_id}')
             current_warehouses = mongo.get_selected_warehouses(chat_id)
+            if len(current_warehouses) >= 5:
+                await query.answer("⚠️ Нельзя выбрать более 5 складов для отслеживания!", show_alert=True)
+                return
             current_warehouses.append(warehouse_id)
             mongo.save_selected_warehouses(chat_id, current_warehouses)
             await show_warehouse_selection(update, context, mongo, user_data)
@@ -183,9 +189,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             mongo.log_activity(user_id, 'finish_warehouse_selection')
             current_warehouses = mongo.get_selected_warehouses(chat_id)
             if current_warehouses:
-                await start_auto_coefficients(chat_id, mongo, user_data, timezone, active_coefficient_jobs)
+                await start_auto_coefficients(context.application, chat_id, mongo, timezone)
+                settings = mongo.get_user_settings(chat_id)
+                interval = settings.get('intervals', {}).get('check_coefficients', 1)
                 await query.message.edit_text(
-                    f"✅ Автоматические проверки запущены (каждые {CHECK_COEFFICIENTS_INTERVAL} минут(ы) в рабочее время)"
+                    f"✅ Автоматические проверки запущены (каждые {interval} минут(ы) в рабочее время)"
                 )
             else:
                 await query.message.edit_text("❌ Не выбрано ни одного склада")
@@ -193,16 +201,20 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data.startswith('disable_warehouses:'):
             mongo.log_activity(user_id, 'disable_warehouses_until_tomorrow')
             await process_disable_warehouses(update, context, mongo, user_data)
-        elif query.data == 'stop_auto_coefficients':
-            mongo.log_activity(user_id, 'stop_auto_coefficients_completely')
-            await process_stop_auto_coefficients(update, context, mongo, user_data)
+        elif query.data == 'stop_auto_coefficients_completely':
+            stopped = await stop_coefficients_for_user(context, update.effective_chat.id, mongo)
+            if stopped:
+                await query.message.edit_text("🛑 Автоматические проверки остановлены")
+            else:
+                await query.message.edit_text("🛑 Автоматические проверки остановлены и настройки складов сброшены")
         elif query.data == 'sales_day':
             mongo.log_activity(user_id, 'sales_day_requested')
             class FakeContext:
-                def __init__(self, chat_id, bot):
+                def __init__(self, chat_id, bot, bot_data):
                     self._chat_id = chat_id
                     self.bot = bot
-            fake_context = FakeContext(update.effective_chat.id, context.bot)
+                    self.bot_data = bot_data
+            fake_context = FakeContext(update.effective_chat.id, context.bot, context.bot_data)
             sales_data = await get_sales_data(fake_context, 'day', mongo, user_data, timezone)
             if not sales_data:
                 await query.message.edit_text("❌ Не удалось получить данные о продажах")
@@ -212,10 +224,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == 'sales_week':
             mongo.log_activity(user_id, 'sales_week_requested')
             class FakeContext:
-                def __init__(self, chat_id, bot):
+                def __init__(self, chat_id, bot, bot_data):
                     self._chat_id = chat_id
                     self.bot = bot
-            fake_context = FakeContext(update.effective_chat.id, context.bot)
+                    self.bot_data = bot_data
+            fake_context = FakeContext(update.effective_chat.id, context.bot, context.bot_data)
             sales_data = await get_sales_data(fake_context, 'week', mongo, user_data, timezone)
             if not sales_data:
                 await query.message.edit_text("❌ Не удалось получить данные о продажах")
@@ -225,6 +238,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
         await query.message.reply_text("❌ Произошла критическая ошибка")
+
+async def stop_coefficients_for_user(context, user_id, mongo):
+    stopped = await stop_auto_coefficients(context.application, user_id, mongo)
+    mongo.update_user_settings(user_id, {
+        'warehouses': {
+            'paused': [],
+            'target': []
+        }
+    })
+    mongo.update_auto_coefficients(user_id, False)
+    return stopped
 
 __all__ = [
     'button_handler',

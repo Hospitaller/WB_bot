@@ -62,8 +62,9 @@ def get_warehouse_nav_kb(available, selected, page, total_pages):
     return inline_kb(keyboard)
 
 # Клавиатура для отключения складов до завтра/совсем
-def get_disable_warehouses_kb(target_names):
-    return inline_kb([
-        [inline_btn("🔕 Выключить до завтра", f"disable_warehouses:{','.join(target_names)}")],
-        [inline_btn("🛑 Выключить совсем", "stop_auto_coefficients")]
-    ])
+def get_disable_warehouses_kb(list_of_id_chunks):
+    buttons = []
+    for chunk in list_of_id_chunks:
+        buttons.append([inline_btn("🔕 Выключить до завтра", f"disable_warehouses:{','.join(str(i) for i in chunk)}")])
+    buttons.append([inline_btn("🛑 Выключить совсем", "stop_auto_coefficients")])
+    return inline_kb(buttons)

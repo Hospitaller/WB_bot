@@ -29,7 +29,7 @@ async def check_all_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 self._chat_id = chat_id
                 self.bot = bot
         fake_context = FakeContext(update.effective_chat.id, context.bot)
-        await fetch_wb_data(fake_context, mongo, user_data, timezone)
+        await fetch_wb_data(fake_context, user_data, mongo, timezone)
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в check_all_stock: {str(e)}", exc_info=True)
         await update.message.reply_text("❌ Произошла критическая ошибка")

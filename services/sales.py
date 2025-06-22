@@ -1,6 +1,7 @@
 import aiohttp
 import logging
 from datetime import datetime, timedelta
+from services.utils import format_sales_message
 
 logger = logging.getLogger(__name__)
 
@@ -63,48 +64,9 @@ async def get_sales_data(context, period_type, mongo, user_data, timezone):
         return None
 
 async def format_sales_message(sales_data, period_type, timezone):
-    """Форматирование сообщения со статистикой продаж"""
-    try:
-        if not sales_data or 'cards' not in sales_data:
-            return "❌ Нет данных о продажах"
-        sales_by_day = {}
-        total_orders = 0
-        total_sum = 0
-        for card in sales_data['cards']:
-            vendor_code = card.get('vendorCode', 'N/A')
-            stats = card.get('statistics', {}).get('selectedPeriod', {})
-            orders_count = stats.get('ordersCount', 0)
-            orders_sum = stats.get('ordersSumRub', 0)
-            if orders_count > 0:
-                total_orders += orders_count
-                total_sum += orders_sum
-                begin_date = datetime.fromisoformat(stats.get('begin', '').replace('Z', ''))
-                date_str = begin_date.strftime('%d.%m.%Y')
-                if date_str not in sales_by_day:
-                    sales_by_day[date_str] = []
-                sales_by_day[date_str].append({
-                    'vendor_code': vendor_code,
-                    'orders_count': orders_count
-                })
-        if period_type == 'day':
-            message = f"Продажи за {list(sales_by_day.keys())[0]}:\n"
-        else:
-            now = datetime.now(timezone)
-            end_date = now.replace(hour=23, minute=59, second=59)
-            begin_date = (now - timedelta(days=6)).replace(hour=0, minute=0, second=1)
-            message = f"Продажи за период {begin_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}:\n"
-        for date, sales in sales_by_day.items():
-            for sale in sales:
-                message += f"- Артикул: {sale['vendor_code']}\n"
-                message += f"- Заказали: {sale['orders_count']}\n"
-                message += "---------------------------\n"
-        message += f"\nИтого:\n"
-        message += f"-- {total_orders} шт.\n"
-        message += f"-- на {total_sum} руб."
-        return message
-    except Exception as e:
-        logger.error(f"Ошибка при форматировании сообщения о продажах: {str(e)}")
-        return "❌ Ошибка при формировании статистики"
+    """Форматирование сообщения со статистикой продаж (deprecated, используйте из utils)"""
+    from services.utils import format_sales_message as _fsm
+    return _fsm(sales_data, period_type, timezone)
 
 __all__ = [
     'get_sales_data',

@@ -3,6 +3,8 @@ import aiohttp
 import asyncio
 from datetime import datetime, time, timedelta
 from config import CONFIG
+from services.api_utils import make_api_request
+from services.utils import format_stock_message
 
 logger = logging.getLogger(__name__)
 
@@ -37,53 +39,6 @@ def format_stock_data(data, user_id: int, mongo, highlight_low=False):
     if highlight_low:
         return low_stock_items
     return result
-
-# Выполняет API запрос с повторными попытками
-async def make_api_request(session, url, headers, context, chat_id, method='GET', json_data=None, max_retries=3, timeout=30):
-    for attempt in range(max_retries):
-        try:
-            if method == 'POST':
-                async with session.post(url, headers=headers, json=json_data, timeout=timeout) as response:
-                    if response.status != 200:
-                        error_msg = f"Ошибка запроса: {response.status}"
-                        logger.critical(f"CRITICAL: {error_msg} для URL: {url}")
-                        await context.bot.send_message(
-                            chat_id=chat_id,
-                            text=f"❌ {error_msg}"
-                        )
-                        return None
-                    return await response.json()
-            else:
-                async with session.get(url, headers=headers, timeout=timeout) as response:
-                    if response.status != 200:
-                        error_msg = f"Ошибка запроса: {response.status}"
-                        logger.critical(f"CRITICAL: {error_msg} для URL: {url}")
-                        await context.bot.send_message(
-                            chat_id=chat_id,
-                            text=f"❌ {error_msg}"
-                        )
-                        return None
-                    return await response.json()
-        except asyncio.TimeoutError:
-            if attempt < max_retries - 1:
-                logger.warning(f"Таймаут при попытке {attempt + 1}/{max_retries}, повторная попытка...")
-                await asyncio.sleep(5)
-                continue
-            error_msg = "Превышено время ожидания ответа от сервера"
-            logger.critical(f"CRITICAL: {error_msg} для URL: {url}")
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"❌ {error_msg}"
-            )
-            return None
-        except Exception as e:
-            error_msg = f"Ошибка при выполнении запроса: {str(e)}"
-            logger.critical(f"CRITICAL: {error_msg} для URL: {url}", exc_info=True)
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"❌ {error_msg}"
-            )
-            return None
 
 # Основная функция получения данных
 async def fetch_wb_data(context, user_data, mongo, timezone):
@@ -120,15 +75,11 @@ async def fetch_wb_data(context, user_data, mongo, timezone):
                 return
             formatted_data = format_stock_data(stock_data, chat_id, mongo)
             low_stock_data = format_stock_data(stock_data, chat_id, mongo, highlight_low=True)
-            if formatted_data:
+            messages = format_stock_message(formatted_data, low_stock_data)
+            for message in messages:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="📦 Остатки на складах:\n" + "\n".join(formatted_data)
-                )
-            if low_stock_data:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="⚠️ ТОВАРЫ ЗАКАНЧИВАЮТСЯ! ⚠️\n" + "\n".join(low_stock_data)
+                    text=message
                 )
     except Exception as e:
         logger.critical(f"CRITICAL ERROR for chat {chat_id}: {str(e)}", exc_info=True)
@@ -171,7 +122,6 @@ async def stop_periodic_checks(application, chat_id, user_data):
 __all__ = [
     'format_stock_data',
     'fetch_wb_data',
-    'make_api_request',
     'start_periodic_checks',
     'stop_periodic_checks',
 ]

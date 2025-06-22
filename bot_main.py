@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from user_data import UserData
 from config import CONFIG
 from mongo_db import MongoDB
+from services.api_utils import make_api_request
 # Импорт обработчиков
 from handlers.common import start, info, handle_message
 from handlers.admin import admin_statistics, send_messages, broadcast_message
@@ -71,6 +72,7 @@ def main():
     application.bot_data['active_coefficient_jobs'] = active_coefficient_jobs
     application.bot_data['warehouse_selection'] = warehouse_selection
     application.bot_data['warehouse_selection_order'] = warehouse_selection_order
+    application.bot_data['make_api_request'] = make_api_request
     # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("info", info))
