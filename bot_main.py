@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 import aiohttp
 import json
@@ -14,6 +14,11 @@ from config import CONFIG
 from mongo_db import MongoDB
 import telegram
 import urllib.parse
+# Импортирую клавиатуры и фабрику кнопок
+from keyboards.layouts import (
+    get_sales_menu_kb, get_premium_kb, get_admin_kb, get_broadcast_kb,
+    get_coefficients_menu_kb, get_stock_menu_kb, get_warehouse_nav_kb, get_disable_warehouses_kb
+)
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -520,16 +525,7 @@ class WBStockBot:
                 # Отправляем все сообщения
                 keyboard = None
                 if target_warehouses and hasattr(context, 'job'):
-                    keyboard = InlineKeyboardMarkup([
-                        [InlineKeyboardButton(
-                            "🔕 Выключить до завтра",
-                            callback_data=f"disable_warehouses:{','.join(target_names)}"
-                        )],
-                        [InlineKeyboardButton(
-                            "🛑 Выключить совсем",
-                            callback_data="stop_auto_coefficients"
-                        )]
-                    ])
+                    keyboard = get_disable_warehouses_kb(target_names)
 
                 for i, message in enumerate(messages):
                     try:
@@ -785,27 +781,13 @@ class WBStockBot:
             start_idx = page * 25
             end_idx = min(start_idx + 25, len(warehouse_items))
             
-            keyboard = []
-            for warehouse_id, warehouse_name in warehouse_items[start_idx:end_idx]:
-                keyboard.append([InlineKeyboardButton(f"-- {warehouse_name} --", callback_data=f"select_warehouse_{warehouse_id}")])
-            
-            # Добавляем навигационные кнопки
-            nav_buttons = []
-            if page > 0:
-                nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"warehouse_page_{page-1}"))
-            if page < total_pages - 1:
-                nav_buttons.append(InlineKeyboardButton("Далее ▶️", callback_data=f"warehouse_page_{page+1}"))
-            if nav_buttons:
-                keyboard.append(nav_buttons)
-            
-            # Добавляем кнопку удаления последнего склада, если есть выбранные склады
-            if selected_warehouses:
-                keyboard.append([InlineKeyboardButton("🗑 Удалить последний", callback_data="remove_last_warehouse")])
-            
-            keyboard.append([InlineKeyboardButton("✅ Завершить", callback_data="finish_warehouse_selection")])
-            
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
+            # Используем фабрику для построения клавиатуры
+            reply_markup = get_warehouse_nav_kb(
+                warehouse_items[start_idx:end_idx],
+                selected_warehouses,
+                page,
+                total_pages
+            )
             message_text = "Выберите склады для мониторинга коэффициентов:\n"
             if selected_warehouses:
                 message_text += "\nВыбранные склады:\n"
@@ -1175,11 +1157,7 @@ class WBStockBot:
             # Логируем открытие меню статистики
             self.mongo.log_activity(user_id, 'sales_menu_opened')
             
-            keyboard = [
-                [InlineKeyboardButton("День", callback_data='sales_day')],
-                [InlineKeyboardButton("Неделя", callback_data='sales_week')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = get_sales_menu_kb()
             
             await update.message.reply_text(
                 "Статистика продаж (до 23:59:59 Мск):",
@@ -1235,16 +1213,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Добавляем информацию о подписке в зависимости от уровня
             if subscription_level == "Premium":
                 message += "\n\nPremium"
-                keyboard = [[InlineKeyboardButton("Premium", callback_data='premium_info')]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+                reply_markup = get_premium_kb()
                 await update.message.reply_text(message, reply_markup=reply_markup)
             elif subscription_level == "Admin":
                 message += "\n\nПривет, Admin!"
-                keyboard = [
-                    [InlineKeyboardButton("✉️ Сообщение", callback_data='send_messages')],
-                    [InlineKeyboardButton("📋 Статистика", callback_data='admin_statistics')]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
+                reply_markup = get_admin_kb()
                 await update.message.reply_text(message, reply_markup=reply_markup)
             else:
                 await update.message.reply_text(message)
@@ -1277,8 +1250,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             # Сохраняем состояние ожидания сообщения
             context.user_data['waiting_for_broadcast'] = True
-            keyboard = [[InlineKeyboardButton("Отправить", callback_data='broadcast_message')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = get_broadcast_kb()
             await query.message.edit_text(
                 "Введите текст сообщения для отправки всем пользователям:",
                 reply_markup=reply_markup
@@ -1351,12 +1323,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif query.data == 'check_coefficients':
             # Логируем открытие меню коэффициентов
             bot.mongo.log_activity(user_id, 'coefficients_menu_opened')
-            keyboard = [
-                [InlineKeyboardButton("Все склады", callback_data='check_all_coefficients')],
-                [InlineKeyboardButton("Запустить авто лимиты", callback_data='start_auto_coefficients')],
-                [InlineKeyboardButton("Остановить авто лимиты", callback_data='stop_auto_coefficients')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = get_coefficients_menu_kb()
             await query.message.edit_text("Выберите действие:", reply_markup=reply_markup)
             return
             
@@ -1594,12 +1561,7 @@ def main():
             # Логируем запрос на проверку остатков
             bot.mongo.log_activity(user_id, 'check_stock_menu_opened')
 
-            keyboard = [
-                [InlineKeyboardButton("Остатки на складах", callback_data='check_all_stock')],
-                [InlineKeyboardButton("Запустить авто остатки", callback_data='start_auto_stock')],
-                [InlineKeyboardButton("Остановить авто остатки", callback_data='stop_auto_stock')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = get_stock_menu_kb()
             await update.message.reply_text("Выберите действие:", reply_markup=reply_markup)
         except Exception as e:
             logger.critical(f"CRITICAL: Ошибка в check_stock: {str(e)}", exc_info=True)
@@ -1651,12 +1613,7 @@ def main():
             # Логируем запрос на проверку коэффициентов
             bot.mongo.log_activity(user_id, 'check_coefficients_requested')
 
-            keyboard = [
-                [InlineKeyboardButton("Все склады", callback_data='check_all_coefficients')],
-                [InlineKeyboardButton("Запустить авто лимиты", callback_data='start_auto_coefficients')],
-                [InlineKeyboardButton("Остановить авто лимиты", callback_data='stop_auto_coefficients')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = get_coefficients_menu_kb()
             await update.message.reply_text("Выберите действие:", reply_markup=reply_markup)
         except Exception as e:
             logger.critical(f"CRITICAL: Ошибка в check_coefficients: {str(e)}", exc_info=True)
@@ -1708,8 +1665,7 @@ def main():
             # Сохраняем состояние ожидания сообщения
             context.user_data['waiting_for_broadcast'] = True
             
-            keyboard = [[InlineKeyboardButton("Отправить", callback_data='broadcast_message')]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = get_broadcast_kb()
             
             await update.message.reply_text(
                 "Введите текст сообщения для отправки всем пользователям:",
