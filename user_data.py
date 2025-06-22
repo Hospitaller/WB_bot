@@ -31,6 +31,8 @@ class UserData:
         }
         # Сохраняем пользователя в MongoDB
         self.mongo.init_user(user_id)
+        # Обновляем use_token на True
+        self.mongo.update_use_token(user_id, True)
 
     def get_user_token(self, user_id: int) -> Optional[str]:
         load_dotenv(self.env_file, override=True)

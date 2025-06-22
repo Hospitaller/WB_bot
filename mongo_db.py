@@ -115,6 +115,7 @@ class MongoDB:
                     'start_date': current_date,
                     'end_date': subscription_end_date
                 },
+                'use_token': False,
                 'last_activity': self.get_moscow_time()
             }
             
@@ -571,4 +572,16 @@ class MongoDB:
             }
         except Exception as e:
             logger.error(f"Ошибка при получении статистики пользователей: {str(e)}")
-            return {'total': 0, 'base': 0, 'premium': 0} 
+            return {'total': 0, 'base': 0, 'premium': 0}
+
+    def update_use_token(self, user_id: int, value: bool):
+        """Обновляет поле use_token для пользователя"""
+        try:
+            self.users.update_one(
+                {'user_id': user_id},
+                {'$set': {'use_token': value}}
+            )
+            logger.info(f"Поле use_token обновлено для пользователя {user_id}: {value}")
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении use_token для пользователя {user_id}: {str(e)}")
+            raise 
