@@ -14,4 +14,8 @@ async def check_coefficients(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("Выберите действие:", reply_markup=reply_markup)
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в check_coefficients: {str(e)}", exc_info=True)
-        await update.message.reply_text("❌ Произошла критическая ошибка") 
+        await update.message.reply_text("❌ Произошла критическая ошибка")
+
+__all__ = [
+    'check_coefficients',
+] 

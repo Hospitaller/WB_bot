@@ -215,4 +215,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.edit_text(message)
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
-        await query.message.reply_text("❌ Произошла критическая ошибка") 
+        await query.message.reply_text("❌ Произошла критическая ошибка")
+
+__all__ = [
+    'button_handler',
+] 

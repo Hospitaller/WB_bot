@@ -19,6 +19,14 @@ from keyboards.layouts import (
     get_sales_menu_kb, get_premium_kb, get_admin_kb, get_broadcast_kb,
     get_coefficients_menu_kb, get_stock_menu_kb, get_warehouse_nav_kb, get_disable_warehouses_kb
 )
+# Импорт обработчиков
+from handlers.common import start, info, handle_message
+from handlers.admin import admin_statistics, send_messages, broadcast_message
+from handlers.stock import check_stock, check_all_stock, start_auto_stock, stop_auto_stock
+from handlers.coefficients import check_coefficients
+from handlers.user import user_account
+from handlers.sales import sales_menu
+from handlers.buttons import button_handler
 
 # Загрузка переменных окружения
 load_dotenv()

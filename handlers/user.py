@@ -20,4 +20,8 @@ async def user_account(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(message)
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в user_account: {str(e)}", exc_info=True)
-        await update.message.reply_text("❌ Произошла критическая ошибка") 
+        await update.message.reply_text("❌ Произошла критическая ошибка")
+
+__all__ = [
+    'user_account',
+] 

@@ -55,4 +55,11 @@ async def stop_auto_stock(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("ℹ️ Нет активных автоматических проверок")
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в stop_auto_stock: {str(e)}", exc_info=True)
-        await update.message.reply_text("❌ Произошла критическая ошибка") 
+        await update.message.reply_text("❌ Произошла критическая ошибка")
+
+__all__ = [
+    'check_stock',
+    'check_all_stock',
+    'start_auto_stock',
+    'stop_auto_stock',
+] 

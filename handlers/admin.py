@@ -75,4 +75,10 @@ async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_for_broadcast'] = False
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в broadcast_message: {str(e)}", exc_info=True)
-        await update.message.reply_text("❌ Произошла критическая ошибка") 
+        await update.message.reply_text("❌ Произошла критическая ошибка")
+
+__all__ = [
+    'admin_statistics',
+    'send_messages',
+    'broadcast_message',
+] 
