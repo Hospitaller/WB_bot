@@ -899,6 +899,8 @@ class WBStockBot:
                 token = update.message.text.strip()
                 self.user_data.add_user(user_id, token)
                 self.mongo.init_user(user_id)
+                # Обновляем last_activity сразу после регистрации
+                self.mongo.update_user_activity(user_id, update.effective_user)
                 # Логируем добавление токена
                 self.mongo.log_activity(user_id, 'token_added')
                 context.user_data['waiting_for_token'] = False
