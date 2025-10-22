@@ -16,7 +16,8 @@ async def get_sales_data(context, period_type, mongo, user_data, timezone):
         headers = {
             'Accept': 'application/json',
             'Authorization': wb_token,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': 'WBAnalyticsBot/1.0 (+https://t.me/)'
         }
         settings = mongo.get_user_settings(chat_id)
         if not settings:
@@ -40,25 +41,52 @@ async def get_sales_data(context, period_type, mongo, user_data, timezone):
                 "end": end_date.strftime("%Y-%m-%d %H:%M:%S")
             },
             "orderBy": {
-                "field": "orders",
-                "mode": "desc"
+                "field": "ordersSumRub",
+                "mode": "asc"
             },
-            "page": 1
+            "page": 1,
+            "pageSize": 100
         }
-        timeout = aiohttp.ClientTimeout(total=60)
+        # Увеличиваем общий таймаут с 60 до 90 секунд, так как WB иногда отвечает медленнее
+        timeout = aiohttp.ClientTimeout(total=90)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            response = await context.bot_data['make_api_request'](
-                session,
-                settings['api']['urls']['sales'],
-                headers,
-                context,
-                chat_id,
-                method='POST',
-                json_data=request_data
-            )
-            if not response or 'data' not in response:
+            # Пагинация: собираем все страницы, пока isNextPage = True
+            all_cards = []
+            combined_data = None
+            page = 1
+            while True:
+                request_data["page"] = page
+                response = await context.bot_data['make_api_request'](
+                    session,
+                    settings['api']['urls']['sales'],
+                    headers,
+                    context,
+                    chat_id,
+                    method='POST',
+                    json_data=request_data,
+                    timeout=120,
+                    max_retries=8
+                )
+                if not response or 'data' not in response:
+                    break
+                data = response['data']
+                if combined_data is None:
+                    # Сохраняем метаданные первой страницы
+                    combined_data = {k: v for k, v in data.items() if k != 'cards'}
+                cards = data.get('cards', [])
+                if cards:
+                    all_cards.extend(cards)
+                # Проверяем флаг следующей страницы
+                is_next = bool(data.get('isNextPage'))
+                if not is_next:
+                    break
+                page += 1
+                # Небольшая пауза между страницами, чтобы не давить на API во время деградации
+                await asyncio.sleep(0.4)
+            if combined_data is None:
                 return None
-            return response['data']
+            combined_data['cards'] = all_cards
+            return combined_data
     except Exception as e:
         logger.error(f"Ошибка при получении данных о продажах: {str(e)}")
         return None

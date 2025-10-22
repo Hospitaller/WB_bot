@@ -217,10 +217,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fake_context = FakeContext(update.effective_chat.id, context.bot, context.bot_data)
             sales_data = await get_sales_data(fake_context, 'day', mongo, user_data, timezone)
             if not sales_data:
-                await query.message.edit_text("❌ Не удалось получить данные о продажах")
+                new_text = "❌ Не удалось получить данные о продажах"
+                if query.message.text != new_text:
+                    await query.message.edit_text(new_text)
+                else:
+                    await query.answer("❌ Не удалось получить данные о продажах", show_alert=False)
                 return
             message = await format_sales_message(sales_data, 'day', timezone)
-            await query.message.edit_text(message)
+            if query.message.text != message:
+                await query.message.edit_text(message)
+            else:
+                await query.answer("Обновлено", show_alert=False)
         elif query.data == 'sales_week':
             mongo.log_activity(user_id, 'sales_week_requested')
             class FakeContext:
@@ -231,10 +238,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fake_context = FakeContext(update.effective_chat.id, context.bot, context.bot_data)
             sales_data = await get_sales_data(fake_context, 'week', mongo, user_data, timezone)
             if not sales_data:
-                await query.message.edit_text("❌ Не удалось получить данные о продажах")
+                new_text = "❌ Не удалось получить данные о продажах"
+                if query.message.text != new_text:
+                    await query.message.edit_text(new_text)
+                else:
+                    await query.answer("❌ Не удалось получить данные о продажах", show_alert=False)
                 return
             message = await format_sales_message(sales_data, 'week', timezone)
-            await query.message.edit_text(message)
+            if query.message.text != message:
+                await query.message.edit_text(message)
+            else:
+                await query.answer("Обновлено", show_alert=False)
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
         await query.message.reply_text("❌ Произошла критическая ошибка")
