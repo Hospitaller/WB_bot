@@ -187,6 +187,8 @@ def format_sales_message(sales_data, period_type, timezone):
         begin_date = (now - timedelta(days=6)).replace(hour=0, minute=0, second=1)
         message = f"Продажи за период {begin_date.strftime('%d.%m.%Y')} - {end_date.strftime('%d.%m.%Y')}:\n"
     for date, sales in sales_by_day.items():
+        # Сортируем продажи по количеству заказов от большего к меньшему
+        sales.sort(key=lambda x: x['orders_count'], reverse=True)
         for sale in sales:
             message += f"- Артикул: {sale['vendor_code']}\n"
             message += f"- Заказали: {sale['orders_count']}\n"

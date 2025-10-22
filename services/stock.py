@@ -18,6 +18,9 @@ def format_stock_data(data, user_id: int, mongo, highlight_low=False):
     user_settings = mongo.get_user_settings(user_id)
     global_settings = mongo.get_global_settings()
     low_stock_threshold = user_settings.get('low_stock_threshold', global_settings.get('low_stock_threshold', 20))
+    
+    # Собираем данные с количеством для сортировки
+    items_with_quantity = []
     for item in data:
         vendor_code = item.get('vendorCode', 'N/A')
         warehouses = item.get('warehouses', [])
@@ -28,6 +31,12 @@ def format_stock_data(data, user_id: int, mongo, highlight_low=False):
         if not total_warehouse:
             continue
         quantity = total_warehouse.get('quantity', 0)
+        items_with_quantity.append((item, vendor_code, quantity))
+    
+    # Сортируем по количеству от большего к меньшему
+    items_with_quantity.sort(key=lambda x: x[2], reverse=True)
+    
+    for item, vendor_code, quantity in items_with_quantity:
         item_text = (
             f"Артикул: {vendor_code}\n"
             f"Остаток: {quantity}\n"
