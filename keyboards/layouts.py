@@ -11,14 +11,18 @@ def get_sales_menu_kb():
 # Кнопка Premium
 
 def get_premium_kb():
-    return inline_kb([[inline_btn("Premium", 'premium_info')]])
+    return inline_kb([
+        [inline_btn("Premium", 'premium_info')],
+        [inline_btn("♻️ Сбросить WB токен", 'reset_wb_token')],
+    ])
 
 # Кнопки для админа
 
 def get_admin_kb():
     return inline_kb([
         [inline_btn("✉️ Сообщение", 'send_messages')],
-        [inline_btn("📋 Статистика", 'admin_statistics')]
+        [inline_btn("📋 Статистика", 'admin_statistics')],
+        [inline_btn("♻️ Сбросить WB токен", 'reset_wb_token')],
     ])
 
 # Кнопка для рассылки

@@ -31,6 +31,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == 'premium_info':
             await query.message.edit_text("Premium")
             return
+        elif query.data == 'reset_wb_token':
+            mongo.log_activity(user_id, 'reset_wb_token_requested')
+            context.user_data['waiting_for_token'] = True
+            await query.message.edit_text(
+                "♻️ Вы запросили сброс WB токена.\n\n"
+                "Пожалуйста, отправьте новый WB токен одним сообщением.\n"
+                "Старый токен будет заменён новым."
+            )
+            return
         elif query.data == 'send_messages':
             subscription_level = mongo.get_subscription_level(user_id)
             if subscription_level != "Admin":
