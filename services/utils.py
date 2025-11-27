@@ -198,6 +198,80 @@ def format_sales_message(sales_data, period_type, timezone):
     message += f"-- на {total_sum} руб."
     return message
 
+def format_promotion_message(promotion_data, timezone):
+    """Форматирование сообщения со списком рекламных кампаний"""
+    from datetime import datetime
+    if not promotion_data or 'adverts' not in promotion_data:
+        return "❌ Нет данных о рекламных кампаниях"
+    
+    promotions_by_day = {}
+    total_count = 0
+    all_promotions = []
+    
+    # Собираем все рекламные кампании из всех групп
+    for advert_group in promotion_data.get('adverts', []):
+        advert_list = advert_group.get('advert_list', [])
+        for advert in advert_list:
+            advert_id = advert.get('advertId')
+            change_time_str = advert.get('changeTime', '')
+            
+            if not advert_id or not change_time_str:
+                continue
+            
+            try:
+                # Парсим дату, убираем Z и обрабатываем временную зону
+                change_time_str_clean = change_time_str.replace('Z', '')
+                # Убираем информацию о временной зоне для парсинга (формат: 2023-05-10T12:12:52.676254+03:00)
+                if '+' in change_time_str_clean:
+                    change_time_str_clean = change_time_str_clean.split('+')[0]
+                elif '-' in change_time_str_clean and change_time_str_clean.count('-') > 2:
+                    # Если есть временная зона с минусом (например, -05:00)
+                    parts = change_time_str_clean.rsplit('-', 2)
+                    if len(parts) == 3 and ':' in parts[-1]:
+                        change_time_str_clean = '-'.join(parts[:-1])
+                change_time = datetime.fromisoformat(change_time_str_clean)
+                date_str = change_time.strftime('%d.%m.%Y')
+                
+                all_promotions.append({
+                    'advert_id': advert_id,
+                    'date': date_str,
+                    'change_time': change_time
+                })
+                total_count += 1
+            except Exception as e:
+                logger.error(f"Ошибка парсинга даты {change_time_str}: {str(e)}")
+                continue
+    
+    # Группируем по датам
+    for promotion in all_promotions:
+        date_str = promotion['date']
+        if date_str not in promotions_by_day:
+            promotions_by_day[date_str] = []
+        promotions_by_day[date_str].append(promotion['advert_id'])
+    
+    if not promotions_by_day:
+        return "❌ Нет данных о рекламных кампаниях"
+    
+    # Формируем сообщение
+    message = "📢 Список рекламных кампаний:\n\n"
+    
+    # Сортируем даты от новых к старым
+    sorted_dates = sorted(promotions_by_day.keys(), key=lambda x: datetime.strptime(x, '%d.%m.%Y'), reverse=True)
+    
+    for date in sorted_dates:
+        promotions = promotions_by_day[date]
+        # Сортируем ID кампаний от большего к меньшему
+        promotions.sort(reverse=True)
+        message += f"📅 {date}:\n"
+        for advert_id in promotions:
+            message += f"- ID РК: {advert_id}\n"
+        message += "---------------------------\n"
+    
+    message += f"\nИтого:\n"
+    message += f"-- {total_count} РК"
+    
+    return message
+
 __all__ = [
     'is_working_time',
 ]

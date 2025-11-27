@@ -72,3 +72,10 @@ def get_disable_warehouses_kb(list_of_id_chunks):
         buttons.append([inline_btn("🔕 Выключить до завтра", f"disable_warehouses:{','.join(str(i) for i in chunk)}")])
     buttons.append([inline_btn("🛑 Выключить совсем", "stop_auto_coefficients")])
     return inline_kb(buttons)
+
+# Клавиатура для рекламных кампаний
+def get_promotion_menu_kb():
+    return inline_kb([
+        [inline_btn("Список РК", 'promotion_list')],
+        [inline_btn("Информация об РК", 'promotion_info')]
+    ])

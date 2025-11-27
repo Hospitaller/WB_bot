@@ -18,6 +18,7 @@ from handlers.coefficients import check_coefficients
 from handlers.user import user_account
 from handlers.buttons import button_handler
 from handlers.sales import sales_menu
+from handlers.promotion import promotion_menu
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -84,6 +85,7 @@ def main():
     application.add_handler(CommandHandler("user_account", user_account))
     application.add_handler(CommandHandler("send_messages", send_messages))
     application.add_handler(CommandHandler("sales", sales_menu))
+    application.add_handler(CommandHandler("promotion", promotion_menu))
     application.add_handler(CommandHandler("admin_statistics", admin_statistics))
     application.add_handler(CommandHandler("broadcast_message", broadcast_message))
     application.add_handler(CallbackQueryHandler(button_handler))

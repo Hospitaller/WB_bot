@@ -2,13 +2,16 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from keyboards.layouts import (
     get_premium_kb, get_admin_kb, get_broadcast_kb, get_coefficients_menu_kb, get_stock_menu_kb,
-    get_sales_menu_kb, get_warehouse_nav_kb, get_disable_warehouses_kb
+    get_sales_menu_kb, get_warehouse_nav_kb, get_disable_warehouses_kb, get_promotion_menu_kb
 )
 import logging
 from services.sales import get_sales_data, format_sales_message
 from services.coefficients import get_warehouse_coefficients, start_auto_coefficients, stop_auto_coefficients
 from services.warehouses import show_warehouse_selection, get_warehouse_list, process_disable_warehouses, process_stop_auto_coefficients
 from services.stock import fetch_wb_data, start_periodic_checks, stop_periodic_checks
+from services.promotion import get_promotion_list
+from services.utils import format_promotion_message
+from handlers.common import start
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +261,36 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.edit_text(message)
             else:
                 await query.answer("Обновлено", show_alert=False)
+        elif query.data == 'promotion':
+            mongo.log_activity(user_id, 'promotion_menu_opened')
+            reply_markup = get_promotion_menu_kb()
+            await query.message.edit_text("Выберите действие:", reply_markup=reply_markup)
+            return
+        elif query.data == 'promotion_list':
+            mongo.log_activity(user_id, 'promotion_list_requested')
+            class FakeContext:
+                def __init__(self, chat_id, bot, bot_data):
+                    self._chat_id = chat_id
+                    self.bot = bot
+                    self.bot_data = bot_data
+            fake_context = FakeContext(update.effective_chat.id, context.bot, context.bot_data)
+            promotion_data = await get_promotion_list(fake_context, mongo, user_data, timezone)
+            if not promotion_data:
+                new_text = "❌ Не удалось получить данные о рекламных кампаниях"
+                if query.message.text != new_text:
+                    await query.message.edit_text(new_text)
+                else:
+                    await query.answer("❌ Не удалось получить данные о рекламных кампаниях", show_alert=False)
+                return
+            message = format_promotion_message(promotion_data, timezone)
+            if query.message.text != message:
+                await query.message.edit_text(message)
+            else:
+                await query.answer("Обновлено", show_alert=False)
+        elif query.data == 'promotion_info':
+            mongo.log_activity(user_id, 'promotion_info_requested')
+            await query.message.edit_text("ℹ️ Функция 'Информация об РК' находится в разработке")
+            return
     except Exception as e:
         logger.critical(f"CRITICAL: Ошибка в обработчике кнопок: {str(e)}", exc_info=True)
         await query.message.reply_text("❌ Произошла критическая ошибка")
