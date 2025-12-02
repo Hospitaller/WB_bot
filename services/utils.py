@@ -37,6 +37,33 @@ def is_working_time(user_id: int, mongo, timezone, is_auto_check: bool = False):
 
 def format_coefficients_message(coefficients_response, tariffs_data, settings):
     from datetime import datetime
+
+    def _parse_number(value):
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            normalized = value.strip().replace(' ', '').replace(',', '.')
+            if not normalized:
+                return None
+            try:
+                return float(normalized)
+            except ValueError:
+                return None
+        return None
+
+    def _format_number(value):
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            if isinstance(value, float) and not value.is_integer():
+                formatted = f"{value:.2f}".rstrip('0').rstrip('.')
+            else:
+                formatted = str(int(value))
+            return formatted.replace('.', ',')
+        return str(value)
+
     warehouses = settings.get('warehouses', {})
     target_warehouses = warehouses.get('target', [])
     excluded_warehouses = warehouses.get('excluded', [])
@@ -62,7 +89,7 @@ def format_coefficients_message(coefficients_response, tariffs_data, settings):
             if target_warehouses and warehouse_id not in target_warehouses:
                 continue
             thresholds = settings.get('thresholds', {})
-            if (item.get('boxTypeName') == "Короба" and 
+            if (item.get('boxTypeID') == 2 and
                 item.get('allowUnload', False) and
                 item.get('coefficient') >= thresholds.get('min_coefficient', 0) and 
                 item.get('coefficient') <= thresholds.get('max_coefficient', 6)):
@@ -77,9 +104,10 @@ def format_coefficients_message(coefficients_response, tariffs_data, settings):
                 if warehouse_name not in filtered_data:
                     filtered_data[warehouse_name] = {
                         'dates': [],
-                        'tariff': None,
-                        'base_cost': None,
-                        'liter_cost': None
+                        'tariff_value': None,
+                        'tariff_display': None,
+                        'base_cost_display': None,
+                        'liter_cost_display': None
                     }
                 filtered_data[warehouse_name]['dates'].append({
                     'date': formatted_date,
@@ -91,22 +119,23 @@ def format_coefficients_message(coefficients_response, tariffs_data, settings):
     if tariffs_data and 'warehouseList' in tariffs_data:
         for warehouse in tariffs_data['warehouseList']:
             warehouse_name = warehouse.get('warehouseName')
-            base_cost = warehouse.get('boxDeliveryBase', 0)
-            liter_cost = warehouse.get('boxDeliveryLiter', 0)
-            if warehouse_name == "Самара (Новосемейкино)":
-                if "Новосемейкино" in filtered_data:
-                    filtered_data["Новосемейкино"]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
-                    filtered_data["Новосемейкино"]['base_cost'] = base_cost
-                    filtered_data["Новосемейкино"]['liter_cost'] = liter_cost
-            elif warehouse_name == "Краснодар":
-                if "Краснодар (Тихорецкая)" in filtered_data:
-                    filtered_data["Краснодар (Тихорецкая)"]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
-                    filtered_data["Краснодар (Тихорецкая)"]['base_cost'] = base_cost
-                    filtered_data["Краснодар (Тихорецкая)"]['liter_cost'] = liter_cost
+            base_cost = _format_number(_parse_number(warehouse.get('boxDeliveryBase')))
+            liter_cost = _format_number(_parse_number(warehouse.get('boxDeliveryLiter')))
+            tariff_value = _parse_number(warehouse.get('boxDeliveryCoefExpr'))
+            tariff_display = _format_number(tariff_value)
+            target_name = None
+            if warehouse_name == "Самара (Новосемейкино)" and "Новосемейкино" in filtered_data:
+                target_name = "Новосемейкино"
+            elif warehouse_name == "Краснодар" and "Краснодар (Тихорецкая)" in filtered_data:
+                target_name = "Краснодар (Тихорецкая)"
             elif warehouse_name in filtered_data:
-                filtered_data[warehouse_name]['tariff'] = warehouse.get('boxDeliveryAndStorageExpr')
-                filtered_data[warehouse_name]['base_cost'] = base_cost
-                filtered_data[warehouse_name]['liter_cost'] = liter_cost
+                target_name = warehouse_name
+            if not target_name:
+                continue
+            filtered_data[target_name]['tariff_value'] = tariff_value
+            filtered_data[target_name]['tariff_display'] = tariff_display
+            filtered_data[target_name]['base_cost_display'] = base_cost or "0"
+            filtered_data[target_name]['liter_cost_display'] = liter_cost or "0"
     for warehouse in filtered_data:
         filtered_data[warehouse]['dates'].sort(key=lambda x: datetime.strptime(x['date'], '%d.%m.%Y'))
     MAX_MESSAGE_LENGTH = 3500
@@ -123,18 +152,20 @@ def format_coefficients_message(coefficients_response, tariffs_data, settings):
             continue
         has_data = True
         new_line = f"*{warehouse_name}*:\n"
-        if data['tariff']:
-            tariff = int(data['tariff'])
-            base_cost = data.get('base_cost', 0)
-            liter_cost = data.get('liter_cost', 0)
+        tariff_value = data.get('tariff_value')
+        if tariff_value is not None:
+            tariff = int(tariff_value)
+            display_tariff = data.get('tariff_display') or _format_number(tariff_value) or "0"
+            base_cost = data.get('base_cost_display', "0")
+            liter_cost = data.get('liter_cost_display', "0")
             if 0 <= tariff <= 130:
-                new_line += f"Кф. склада: `{data['tariff']}%` ✅\n"
+                new_line += f"Кф. склада: `{display_tariff}%` ✅\n"
                 new_line += f"Логистика: `{base_cost} руб.+ {liter_cost} доп.л`\n"
             elif 131 <= tariff <= 150:
-                new_line += f"Кф. склада: `{data['tariff']}%` ⚠️\n"
+                new_line += f"Кф. склада: `{display_tariff}%` ⚠️\n"
                 new_line += f"Логистика: `{base_cost} руб.+ {liter_cost} доп.л`\n"
             else:
-                new_line += f"Кф. склада: `{data['tariff']}%` ❌\n"
+                new_line += f"Кф. склада: `{display_tariff}%` ❌\n"
                 new_line += f"Логистика: `{base_cost} руб.+ {liter_cost} доп.л`\n"
         for item in data['dates']:
             new_line += f"--- {item['date']} = {item['coefficient']}\n"
